@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Tixcraft 搶票助手",
+  "version": "1.0.0",
+  "description": "Tixcraft 自動搶票工具，支援區域選擇、數量設定與自動驗證碼辨識",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://tixcraft.com/*",
+    "https://*.tixcraft.com/*",
+    "http://localhost/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Tixcraft 搶票助手"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://tixcraft.com/*",
+        "https://*.tixcraft.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

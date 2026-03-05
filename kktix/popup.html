@@ -1,0 +1,96 @@
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KKTIX 搶票助手</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+    <div class="container">
+        <!-- 標題列 -->
+        <div class="header">
+            <span class="logo">🎫</span>
+            <h1>KKTIX 搶票助手</h1>
+        </div>
+
+        <!-- 狀態列 + 主體雙欄佈局 -->
+        <div class="layout">
+
+            <!-- 左側：操作區塊 -->
+            <div class="panel-left">
+
+                <!-- 狀態列 -->
+                <div class="status-bar" id="statusBar">
+                    <span class="status-dot idle" id="statusDot"></span>
+                    <span id="statusText">待機中</span>
+                </div>
+
+                <!-- 設定區塊 -->
+                <div class="section">
+                    <label class="label" for="buyCount">購買數量</label>
+                    <input type="number" id="buyCount" class="input" min="1" max="10" value="2" placeholder="輸入購買數量" />
+                </div>
+
+                <div class="section">
+                    <div class="area-header">
+                        <label class="label">選擇票種</label>
+                        <button id="fetchTicketsBtn" class="btn btn-fetch">🔄 抓取票種</button>
+                    </div>
+                    <div class="hint" style="margin-bottom:6px">勾選後優先順序由上至下；未抓取時請使用手動輸入</div>
+
+                    <!-- 票種 Checkbox 清單 -->
+                    <div id="ticketList" class="ticket-checklist">
+                        <div class="ticket-placeholder">請點擊「🔄 抓取票種」從頁面載入可選票種</div>
+                    </div>
+
+                    <!-- 備用：手動輸入 -->
+                    <details id="manualAreaWrap" class="manual-area" style="display: none;">
+                        <summary>✏️ 手動輸入（備用）</summary>
+                        <textarea id="chooseArea" class="textarea" rows="2"
+                            placeholder="例如：2,880, 4,480, 2880, 4480"></textarea>
+                    </details>
+                </div>
+
+                <div class="section">
+                    <label class="label" for="memberCode">會員代碼</label>
+                    <input type="text" id="memberCode" class="input" placeholder="（選填）輸入會員代碼" />
+                </div>
+
+                <div class="section">
+                    <label class="label" for="question">
+                        問題答案
+                        <span class="hint">（有 Google reCaptcha 則不需填寫）</span>
+                    </label>
+                    <input type="text" id="question" class="input" placeholder="（選填）輸入問題答案" />
+                </div>
+
+                <!-- 按鈕區 -->
+                <div class="button-group">
+                    <button id="startBtn" class="btn btn-start">▶ 開始搶票</button>
+                    <button id="stopBtn" class="btn btn-stop" disabled>■ 停止</button>
+                </div>
+
+                <!-- 儲存設定按鈕 -->
+                <button id="saveBtn" class="btn btn-save">💾 儲存設定</button>
+
+            </div><!-- /panel-left -->
+
+            <!-- 右側：執行紀錄 -->
+            <div class="panel-right">
+                <label class="label">執行紀錄</label>
+                <div id="logArea" class="log-area"></div>
+            </div><!-- /panel-right -->
+
+        </div><!-- /layout -->
+
+        <div class="footer">
+            <span>僅適用於 kktix.com</span>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

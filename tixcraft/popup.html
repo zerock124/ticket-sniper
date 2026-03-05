@@ -1,0 +1,99 @@
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tixcraft 搶票助手</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+    <div class="container">
+        <!-- 標題列 -->
+        <div class="header">
+            <span class="logo">🎟️</span>
+            <h1>Tixcraft 搶票助手</h1>
+        </div>
+
+        <!-- 狀態列 + 主體雙欄佈局 -->
+        <div class="layout">
+
+            <!-- 左側：操作區塊 -->
+            <div class="panel-left">
+
+                <!-- 狀態列 -->
+                <div class="status-bar" id="statusBar">
+                    <span class="status-dot idle" id="statusDot"></span>
+                    <span id="statusText">待機中</span>
+                </div>
+
+                <!-- OCR Server 狀態 -->
+                <div class="ocr-status-row">
+                    <span class="ocr-dot" id="ocrDot"></span>
+                    <span class="ocr-label" id="ocrLabel">OCR Server：檢查中...</span>
+                    <button id="checkOcrBtn" class="btn btn-ocr-check">🔄</button>
+                </div>
+
+                <!-- 設定區塊：購買數量 -->
+                <div class="section">
+                    <label class="label" for="buyCount">購買數量</label>
+                    <input type="number" id="buyCount" class="input" min="1" max="10" value="2"
+                        placeholder="輸入購買數量" />
+                </div>
+
+                <!-- 設定區塊：場次日期 -->
+                <div class="section">
+                    <label class="label" for="chooseDate">場次日期</label>
+                    <input type="text" id="chooseDate" class="input"
+                        placeholder="例如：2026/03/15" />
+                    <div class="hint">輸入日期關鍵字，自動選擇符合的場次</div>
+                </div>
+
+                <!-- 設定區塊：區域關鍵字 -->
+                <div class="section">
+                    <label class="label" for="chooseArea">區域關鍵字</label>
+                    <input type="text" id="chooseArea" class="input"
+                        placeholder="例如：A區, 搖滾區" />
+                    <div class="hint">多個關鍵字以半形逗號分隔，依序優先選擇</div>
+                </div>
+
+                <!-- OCR API 網址設定 -->
+                <div class="section">
+                    <label class="label" for="ocrApiUrl">
+                        OCR API 網址
+                        <span class="hint">（本地驗證碼辨識服務）</span>
+                    </label>
+                    <input type="text" id="ocrApiUrl" class="input"
+                        placeholder="http://localhost:5000/ocr"
+                        value="http://localhost:5000/ocr" />
+                    <div class="hint">啟動方式：<code>python ocr_server.py</code></div>
+                </div>
+
+                <!-- 按鈕區 -->
+                <div class="button-group">
+                    <button id="startBtn" class="btn btn-start">▶ 開始搶票</button>
+                    <button id="stopBtn" class="btn btn-stop" disabled>■ 停止</button>
+                </div>
+
+                <!-- 儲存設定按鈕 -->
+                <button id="saveBtn" class="btn btn-save">💾 儲存設定</button>
+
+            </div><!-- /panel-left -->
+
+            <!-- 右側：執行紀錄 -->
+            <div class="panel-right">
+                <label class="label">執行紀錄</label>
+                <div id="logArea" class="log-area"></div>
+            </div><!-- /panel-right -->
+
+        </div><!-- /layout -->
+
+        <div class="footer">
+            <span>僅適用於 tixcraft.com · 需搭配本地 OCR Server</span>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
