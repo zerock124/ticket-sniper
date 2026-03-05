@@ -1,3 +1,4 @@
+#!python3.8
 """
 ocr_server.py — Tixcraft 驗證碼辨識本地 API Server
 =====================================================
@@ -14,9 +15,9 @@ Chrome Extension 會自動向 http://localhost:5000/ocr 送出 Base64 圖片，
 import base64
 import io
 
-# ── Pillow 10.0 相容性補丁 ──────────────────────────────────────
+# ── Pillow 10.0 相容性補丁 ──────────────────────────────────
 # Pillow >= 10.0.0 移除了 Image.ANTIALIAS，改為 Image.LANCZOS
-# ddddocr 內部仍使用舊屬性，此補丁在 ddddocr 載入前先行修補
+# ddddocr 1.5.x 內部仍使用舊屬性，此補丁在 ddddocr 載入前先行修補
 import PIL.Image
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
@@ -38,7 +39,8 @@ CORS(app, origins=[
 ])
 
 # 初始化 ddddocr（只初始化一次，節省效能）
-ocr = ddddocr.DdddOcr()
+ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
+
 
 @app.route("/ocr", methods=["POST"])
 def recognize():

@@ -20,12 +20,46 @@ if (window.__tixcraftLoaded) {
     let isRunning = false;
     let shouldStop = false;
 
+    // ── 網路請求追蹤器 ────────────────────────────────────────────
+    // 計算目前進行中的 XHR / fetch 請求數量
+    let _pendingRequests = 0;
+
+    // 攔截 XMLHttpRequest：在 open 時計數加一，請求結束時計數減一
+    (function patchXHR() {
+        const OrigXHR = window.XMLHttpRequest;
+        function PatchedXHR() {
+            const xhr = new OrigXHR();
+            const origOpen = xhr.open.bind(xhr);
+            xhr.open = function (...args) {
+                _pendingRequests++;
+                xhr.addEventListener("loadend", () => {
+                    _pendingRequests = Math.max(0, _pendingRequests - 1);
+                });
+                return origOpen(...args);
+            };
+            return xhr;
+        }
+        PatchedXHR.prototype = OrigXHR.prototype;
+        window.XMLHttpRequest = PatchedXHR;
+    })();
+
+    // 攔截 fetch：呼叫前計數加一，Promise 結束後計數減一
+    (function patchFetch() {
+        const origFetch = window.fetch;
+        window.fetch = function (...args) {
+            _pendingRequests++;
+            return origFetch(...args).finally(() => {
+                _pendingRequests = Math.max(0, _pendingRequests - 1);
+            });
+        };
+    })();
+
     // 目前執行參數（由 popup 傳入）
     let CONFIG = {
         buy_count: 2,
         choose_date: [],       // 場次日期關鍵字陣列（用於 DETAIL 頁比對場次）
         choose_area: [],       // 區域關鍵字陣列（用於 GAME 頁比對區域）
-        ocr_api_url: "http://localhost:5000/ocr",
+        ocr_api_url: "http://localhost:5511/ocr",
     };
 
     // ── 工具函式 ─────────────────────────────────────────────────
@@ -53,7 +87,6 @@ if (window.__tixcraftLoaded) {
             if (shouldStop) throw new Error("使用者已停止");
             const el = context.querySelector(selector);
             if (el) return el;
-            await delay(300);
         }
         throw new Error(`等待元素逾時：${selector}`);
     }
@@ -121,10 +154,11 @@ if (window.__tixcraftLoaded) {
 
     function detectPageType() {
         const url = window.location.href;
-        if (url.startsWith("https://tixcraft.com/activity/detail")) return "DETAIL";   // 活動詳情 / 場次選擇頁
-        if (url.includes("/ticket/area/")) return "GAME";                            // 選座/選區頁
-        if (url.includes("/ticket/checkout/")) return "CHECKOUT";                     // 驗證碼結帳頁
-        if (url.includes("/ticket/ticket/")) return "VERIFY";                         // 驗證頁（同結帳）
+        if (url.startsWith("https://tixcraft.com/activity/detail")) return "DETAIL";   // 活動詳情
+        if (url.includes("/activity/game")) return "DATE";                            // 場次選擇頁
+        if (url.includes("/ticket/area/")) return "GAME";                              // 選座/選區頁
+        if (url.includes("/ticket/checkout/")) return "CHECKOUT";                      // 驗證碼結帳頁
+        if (url.includes("/ticket/ticket/")) return "VERIFY";                          // 驗證頁（同結帳）
         return "UNKNOWN";
     }
 
@@ -143,10 +177,6 @@ if (window.__tixcraftLoaded) {
      *     td[3] 立即訂購按鈕（button）
      */
     async function detailStep_selectSession() {
-        sendLog("偵測到活動詳情頁，開始選擇場次...");
-        // 點擊「立即購票」按鈕
-        const buyTicketBtn = document.querySelector("ul#tab-func li.buy a");
-        buyTicketBtn.click();
         sendLog("等待場次列表載入...");
         await waitForElement("#gameList", 15000);
 
@@ -168,7 +198,6 @@ if (window.__tixcraftLoaded) {
         if (availableRows.length === 0) {
             sendLog("⚠️ 目前無可購買場次，重新整理頁面...", "warn");
             sendEvent("RELOAD");
-            await delay(500);
             window.location.reload();
             return false;
         }
@@ -202,10 +231,10 @@ if (window.__tixcraftLoaded) {
         const location = selectedRow.querySelector("td:nth-child(3)")?.innerText?.trim() ?? "";
         sendLog(`選定場次：${time} ／ ${name} ／ ${location}`);
 
-        // 點擊「立即訂購」按鈕
+        // 點擊「立即訂購」按鈕，並等待網路請求完成後再繼續
         const buyBtn = selectedRow.querySelector("td:nth-child(4) button, td:nth-child(4) a");
         buyBtn.click();
-        sendLog("DetailStep 完成：已點擊立即訂購", "success");
+        sendLog("DetailStep：已點擊立即訂購");
         return true;
     }
 
@@ -251,7 +280,6 @@ if (window.__tixcraftLoaded) {
         if (availableLinks.length === 0) {
             sendLog("⚠️ 所有區域已售完，重新整理頁面...", "warn");
             sendEvent("RELOAD");
-            await delay(500);
             window.location.reload();
             return false;
         }
@@ -287,7 +315,7 @@ if (window.__tixcraftLoaded) {
         sendLog(`選定區域：${zoneText}`);
 
         selectedLink.click();
-        sendLog("GameStep 1 完成：已點擊區域連結", "success");
+        sendLog("GameStep 1：已點擊區域連結");
         return true;
     }
 
@@ -399,7 +427,7 @@ if (window.__tixcraftLoaded) {
 
             sendLog(`⚠️ 驗證碼錯誤，重新辨識（第 ${retryCount + 2} 次）...`, "warn");
 
-            // 點擊驗證碼圖片以刷新
+            // 點擊驗證碼圖片以刷新，並等待新圖片的網路請求完成
             const imgEl = document.querySelector("#TicketForm_verifyCode-image");
             if (imgEl) {
                 imgEl.click();
@@ -425,19 +453,22 @@ if (window.__tixcraftLoaded) {
 
         try {
             if (pageType === "DETAIL") {
-                // ── 活動詳情 / 場次選擇頁流程 ─────────────────────
+                // ── 活動詳情頁流程 ─────────────────────
+                sendLog("跳轉至場次選擇頁...");
+                window.location.href = "https://tixcraft.com/activity/game/" + window.location.pathname.split("/").pop();
+            } else if (pageType === "DATE") {
                 sendLog("進入場次選擇流程...");
                 const selected = await detailStep_selectSession();
                 if (!selected) return; // 無可購買場次，觸發 reload
                 sendLog("場次選擇完成，等待跳轉至選座頁...", "success");
-
-            } else if (pageType === "GAME") {
+            }
+            else if (pageType === "GAME") {
                 // ── 活動選座頁流程 ────────────────────────────────
                 sendLog("進入活動票種選擇流程...");
                 const selected = await gameStep1_selectZone();
                 if (!selected) return; // 已售完，觸發 reload
 
-                sendLog("活動選座步驟完成，等待跳轉至結帳頁...", "success");
+                sendLog("活動選座步驟完成，等待跳轉至驗證碼結帳頁...", "success");
 
             } else if (pageType === "CHECKOUT" || pageType === "VERIFY") {
                 // ── 驗證碼結帳頁流程 ──────────────────────────────
@@ -447,7 +478,7 @@ if (window.__tixcraftLoaded) {
                 await waitForElement("#TicketForm_verifyCode-image", 10000);
 
                 const { inputEl, retryCount } = await checkoutStep1_captcha(0);
-                
+
                 await checkoutStep2_submit(inputEl, retryCount);
 
                 sendLog("🎉 結帳流程完成！", "success");
@@ -467,7 +498,6 @@ if (window.__tixcraftLoaded) {
                 if (errorCount >= 3) {
                     sendLog("錯誤過多，重新整理頁面...", "error");
                     sendEvent("RELOAD");
-                    await delay(500);
                     window.location.reload();
                     return;
                 }
@@ -480,10 +510,10 @@ if (window.__tixcraftLoaded) {
     // ── 監聽 popup 傳入的指令 ────────────────────────────────────
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.action === "START") {
-            CONFIG.buy_count  = msg.buyCount  ?? 2;
+            CONFIG.buy_count = msg.buyCount ?? 2;
             CONFIG.choose_date = msg.chooseDate ?? [];
             CONFIG.choose_area = msg.chooseArea ?? [];
-            CONFIG.ocr_api_url = msg.ocrApiUrl  ?? "http://localhost:5000/ocr";
+            CONFIG.ocr_api_url = msg.ocrApiUrl ?? "http://localhost:5511/ocr";
 
             if (!isRunning) {
                 runFlow();
@@ -533,15 +563,45 @@ if (window.__tixcraftLoaded) {
     }
 
     // 監聽頁面變動，偵測是否抵達結帳頁
-    const checkoutObserver = new MutationObserver(() => {
-        const url = window.location.href;
-        if (url.includes("/ticket/checkout/") || url.includes("/ticket/verify/")) {
-            checkoutObserver.disconnect();
-            notify();
-        }
-    });
-    checkoutObserver.observe(document.body, { childList: true, subtree: true });
+    function setupCheckoutObserver() {
+        if (!document.body) return;
+        const checkoutObserver = new MutationObserver(() => {
+            const url = window.location.href;
+            if (url.includes("/ticket/checkout/") || url.includes("/ticket/verify/")) {
+                checkoutObserver.disconnect();
+                notify();
+            }
+        });
+        checkoutObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
-    sendLog("Tixcraft 搶票助手已注入頁面 ✅", "success");
+    // DOM 就緒後：設定 Observer，並自動從 storage 恢復執行狀態
+    function onDomReady() {
+        setupCheckoutObserver();
+        sendLog("Tixcraft 搶票助手已注入頁面 ✅", "success");
+
+        // 若 storage 記錄為執行中，無需等待 background.js 訊息，直接自啟動
+        chrome.storage.local.get(["isRunning", "runningConfig"], (result) => {
+            if (!result.isRunning || !result.runningConfig || isRunning) return;
+            const cfg = result.runningConfig;
+            CONFIG.buy_count   = cfg.buyCount   ?? 2;
+            CONFIG.choose_date = Array.isArray(cfg.chooseDate)
+                ? cfg.chooseDate
+                : (cfg.chooseDate ? cfg.chooseDate.split(",").map(s => s.trim()).filter(Boolean) : []);
+            CONFIG.choose_area = Array.isArray(cfg.chooseArea)
+                ? cfg.chooseArea
+                : (cfg.chooseArea ? cfg.chooseArea.split(",").map(s => s.trim()).filter(Boolean) : []);
+            CONFIG.ocr_api_url = cfg.ocrApiUrl ?? "http://localhost:5511/ocr";
+            sendLog("偵測到搶票任務進行中，自動啟動流程...", "info");
+            runFlow();
+        });
+    }
+
+    // document_start 時 document.body 可能尚未存在，等 DOMContentLoaded 後再執行
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", onDomReady);
+    } else {
+        onDomReady();
+    }
 
 } // end of __tixcraftLoaded guard

@@ -1,4 +1,4 @@
 flask
 flask-cors
-ddddocr==1.4.11
+ddddocr==1.5.6
 Pillow

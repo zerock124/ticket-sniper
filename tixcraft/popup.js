@@ -3,30 +3,48 @@
 // ============================================================
 
 // DOM 元素參考
-const buyCountEl    = document.getElementById("buyCount");
-const chooseDateEl  = document.getElementById("chooseDate");
-const chooseAreaEl  = document.getElementById("chooseArea");
-const ocrApiUrlEl   = document.getElementById("ocrApiUrl");
-const startBtn      = document.getElementById("startBtn");
-const stopBtn       = document.getElementById("stopBtn");
-const saveBtn       = document.getElementById("saveBtn");
-const statusDot     = document.getElementById("statusDot");
-const statusText    = document.getElementById("statusText");
-const logArea       = document.getElementById("logArea");
-const ocrDot        = document.getElementById("ocrDot");
-const ocrLabel      = document.getElementById("ocrLabel");
-const checkOcrBtn   = document.getElementById("checkOcrBtn");
+const buyCountEl = document.getElementById("buyCount");
+const chooseDateEl = document.getElementById("chooseDate");
+const chooseAreaEl = document.getElementById("chooseArea");
+const ocrApiUrlEl = document.getElementById("ocrApiUrl");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const saveBtn = document.getElementById("saveBtn");
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const logArea = document.getElementById("logArea");
+const ocrDot = document.getElementById("ocrDot");
+const ocrLabel = document.getElementById("ocrLabel");
+const checkOcrBtn = document.getElementById("checkOcrBtn");
 
 // ── 工具函式 ─────────────────────────────────────────────────
 
-// 寫入紀錄訊息
-function addLog(message, type = "info") {
+// 日誌最大保留筆數，避免 storage 無限增長
+const MAX_LOG_ENTRIES = 300;
+
+// 將單筆日誌渲染到畫面（不寫入 storage）
+function _renderLogEntry(time, message, type) {
     const entry = document.createElement("div");
     entry.className = `log-entry ${type}`;
-    const now = new Date().toLocaleTimeString("zh-TW");
-    entry.textContent = `[${now}] ${message}`;
+    entry.textContent = `[${time}] ${message}`;
     logArea.appendChild(entry);
     logArea.scrollTop = logArea.scrollHeight;
+}
+
+// 寫入紀錄訊息，並同步持久化到 chrome.storage.local
+function addLog(message, type = "info") {
+    const now = new Date().toLocaleTimeString("zh-TW");
+    _renderLogEntry(now, message, type);
+
+    // 讀取現有日誌 → 追加 → 裁切超量 → 寫回
+    chrome.storage.local.get(["savedLogs"], (result) => {
+        const logs = result.savedLogs ?? [];
+        logs.push({ time: now, message, type });
+        if (logs.length > MAX_LOG_ENTRIES) {
+            logs.splice(0, logs.length - MAX_LOG_ENTRIES);
+        }
+        chrome.storage.local.set({ savedLogs: logs });
+    });
 }
 
 // 更新主狀態列
@@ -51,7 +69,7 @@ function setOcrStatus(online) {
 // ── OCR Server 健康檢查 ───────────────────────────────────────
 
 async function checkOcrServer() {
-    const apiUrl = ocrApiUrlEl.value.trim() || "http://localhost:5000/ocr";
+    const apiUrl = ocrApiUrlEl.value.trim() || "http://localhost:5511/ocr";
     // 將 /ocr 替換為 /health 進行健康檢查
     const healthUrl = apiUrl.replace(/\/ocr$/, "/health");
 
@@ -80,10 +98,10 @@ function loadSettings() {
     chrome.storage.local.get(
         ["buyCount", "chooseDate", "chooseArea", "ocrApiUrl"],
         (result) => {
-            buyCountEl.value   = result.buyCount   ?? 2;
+            buyCountEl.value = result.buyCount ?? 2;
             chooseDateEl.value = result.chooseDate ?? "";
             chooseAreaEl.value = result.chooseArea ?? "";
-            ocrApiUrlEl.value  = result.ocrApiUrl  ?? "http://localhost:5000/ocr";
+            ocrApiUrlEl.value = result.ocrApiUrl ?? "http://localhost:5511/ocr";
         }
     );
 }
@@ -91,10 +109,10 @@ function loadSettings() {
 // 組建設定物件
 function buildSettings() {
     return {
-        buyCount:    parseInt(buyCountEl.value, 10) || 2,
-        chooseDate:  chooseDateEl.value.trim(),
-        chooseArea:  chooseAreaEl.value.trim(),
-        ocrApiUrl:   ocrApiUrlEl.value.trim() || "http://localhost:5000/ocr",
+        buyCount: parseInt(buyCountEl.value, 10) || 2,
+        chooseDate: chooseDateEl.value.trim(),
+        chooseArea: chooseAreaEl.value.trim(),
+        ocrApiUrl: ocrApiUrlEl.value.trim() || "http://localhost:5511/ocr",
     };
 }
 
@@ -120,7 +138,7 @@ async function sendToContent(action, data = {}) {
     // 先注入 content.js（如果尚未注入）
     try {
         await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
-    } catch (_) {}
+    } catch (_) { }
 
     chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
         if (chrome.runtime.lastError) {
@@ -137,6 +155,12 @@ async function sendToContent(action, data = {}) {
 
 // 開始搶票
 startBtn.addEventListener("click", async () => {
+    // 請先檢查ocr使否連線成功
+    if(ocrDot.className.includes("online") === false){
+        addLog("❌ 請先確保 OCR Server 已啟動並連線成功", "error");
+        return;
+    }
+
     const settings = buildSettings();
 
     if (!settings.buyCount || settings.buyCount < 1) {
@@ -152,25 +176,25 @@ startBtn.addEventListener("click", async () => {
         ...settings,
         isRunning: true,
         runningConfig: {
-            buyCount:   settings.buyCount,
+            buyCount: settings.buyCount,
             chooseDate: settings.chooseDate,
             chooseArea: settings.chooseArea,
-            ocrApiUrl:  settings.ocrApiUrl,
+            ocrApiUrl: settings.ocrApiUrl,
         },
     });
 
     setStatus("running", "搶票執行中...");
     startBtn.disabled = true;
-    stopBtn.disabled  = false;
+    stopBtn.disabled = false;
     addLog("🚀 開始搶票流程", "info");
     if (chooseDateArr.length > 0) addLog(`場次日期：${chooseDateArr.join(" / ")}`, "info");
     if (chooseAreaArr.length > 0) addLog(`區域關鍵字：${chooseAreaArr.join(" / ")}`, "info");
 
     await sendToContent("START", {
-        buyCount:   settings.buyCount,
+        buyCount: settings.buyCount,
         chooseDate: chooseDateArr,
         chooseArea: chooseAreaArr,
-        ocrApiUrl:  settings.ocrApiUrl,
+        ocrApiUrl: settings.ocrApiUrl,
     });
 });
 
@@ -179,7 +203,7 @@ stopBtn.addEventListener("click", async () => {
     chrome.storage.local.set({ isRunning: false });
     setStatus("idle", "已停止");
     startBtn.disabled = false;
-    stopBtn.disabled  = true;
+    stopBtn.disabled = true;
     addLog("⏹ 使用者手動停止", "warn");
     await sendToContent("STOP");
 });
@@ -194,9 +218,9 @@ saveBtn.addEventListener("click", () => {
 
 // 檢查 OCR Server
 checkOcrBtn.addEventListener("click", () => {
-    ocrLabel.textContent  = "OCR Server：檢查中...";
-    ocrLabel.style.color  = "#aaa";
-    ocrDot.className      = "ocr-dot";
+    ocrLabel.textContent = "OCR Server：檢查中...";
+    ocrLabel.style.color = "#aaa";
+    ocrDot.className = "ocr-dot";
     checkOcrServer();
 });
 
@@ -213,10 +237,12 @@ chrome.runtime.onMessage.addListener((msg) => {
             chrome.storage.local.set({ isRunning: false });
             setStatus("idle", "流程完成");
             startBtn.disabled = false;
-            stopBtn.disabled  = true;
+            stopBtn.disabled = true;
             addLog("🎉 所有步驟完成！", "success");
             break;
         case "RELOAD":
+            // 頁面重新整理：清除舊日誌，讓下一頁從乾淨狀態開始
+            chrome.storage.local.remove("savedLogs");
             addLog("🔄 頁面重新整理中...", "warn");
             break;
         case "ERROR":
@@ -227,19 +253,25 @@ chrome.runtime.onMessage.addListener((msg) => {
 });
 
 // ── 初始化 ──────────────────────────────────────────────────
-loadSettings();
+(function () {
+    loadSettings();
 
-// 啟動時檢查 OCR Server 狀態
-checkOcrServer();
+    // 還原歷史日誌，接著恢復 UI 執行狀態
+    chrome.storage.local.get(["isRunning", "savedLogs"], (result) => {
+        // 先把持久化的日誌重新渲染到畫面（不重複寫入 storage）
+        const savedLogs = result.savedLogs ?? [];
+        savedLogs.forEach(({ time, message, type }) => {
+            _renderLogEntry(time, message, type);
+        });
 
-// 若擴充功能重新開啟時正在執行中，恢復 UI 狀態
-chrome.storage.local.get(["isRunning"], (result) => {
-    if (result.isRunning) {
-        setStatus("running", "搶票執行中...");
-        startBtn.disabled = true;
-        stopBtn.disabled  = false;
-        addLog("偵測到搶票流程仍在執行中", "warn");
-    } else {
-        addLog("擴充功能已載入，請設定場次日期與區域關鍵字後開始搶票", "info");
-    }
-});
+        // 再加上本次開啟的狀態訊息
+        if (result.isRunning) {
+            setStatus("running", "搶票執行中...");
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            addLog("偵測到搶票流程仍在執行中", "warn");
+        } else {
+            addLog("擴充功能已載入，請設定場次日期與區域關鍵字後開始搶票", "info");
+        }
+    });
+})();

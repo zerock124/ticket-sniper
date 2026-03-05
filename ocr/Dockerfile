@@ -1,5 +1,5 @@
-# 使用官方 Python 3.11 slim 版本作為基礎映像
-FROM python:3.11-slim
+# 使用官方 Python 3.8 slim 版本作為基礎映像
+FROM python:3.8-slim
 
 # 設定工作目錄
 WORKDIR /app
