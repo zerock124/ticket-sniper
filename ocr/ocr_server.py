@@ -85,8 +85,8 @@ def health():
 if __name__ == "__main__":
     print("=" * 50)
     print("  Tixcraft OCR Server 已啟動")
-    print("  監聽位址：http://localhost:5000")
+    print("  監聽位址：http://localhost:5511")
     print("  驗證碼辨識端點：POST /ocr")
     print("  健康檢查端點：GET /health")
     print("=" * 50)
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5511, debug=False)

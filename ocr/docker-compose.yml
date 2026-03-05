@@ -1,0 +1,10 @@
+services:
+  ocr-server:
+    build: .
+    container_name: tixcraft-ocr-server
+    ports:
+      - "5511:5511"   # 主機埠:容器埠
+    restart: unless-stopped
+    # 若需掛載額外模型檔案，可取消下方註解
+    # volumes:
+    #   - ./models:/app/models
