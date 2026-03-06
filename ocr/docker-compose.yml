@@ -1,7 +1,7 @@
 services:
   ocr-server:
     build: .
-    container_name: tixcraft-ocr-server
+    container_name: ocr-server
     ports:
       - "5511:5511"   # 主機埠:容器埠
     restart: unless-stopped

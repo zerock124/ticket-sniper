@@ -1,14 +1,13 @@
-#!python3.8
 """
 ocr_server.py — Tixcraft 驗證碼辨識本地 API Server
 =====================================================
 使用方式：
   1. 安裝依賴套件：
        pip install flask ddddocr flask-cors
-  2. 啟動服務（預設監聽 port 5000）：
+  2. 啟動服務（預設監聽 port 5511）：
        python ocr_server.py
 
-Chrome Extension 會自動向 http://localhost:5000/ocr 送出 Base64 圖片，
+Chrome Extension 會自動向 http://localhost:5511/ocr 送出 Base64 圖片，
 此 Server 使用 ddddocr 辨識後回傳文字結果。
 """
 
@@ -30,13 +29,12 @@ app = Flask(__name__)
 
 # 允許來自 Chrome Extension 及 Tixcraft 頁面的跨來源請求
 # content.js 在 tixcraft.com 頁面中執行，fetch 的 Origin 為 tixcraft.com，
-# 因此需同時允許 tixcraft.com 網域
-CORS(app, origins=[
-    "https://tixcraft.com",
-    "https://www.tixcraft.com",
-    "https://tixcraft.net",
-    "https://www.tixcraft.net",
-])
+# 因此需同時允許 tixcraft.com 網域及所有來源（Chrome Extension 可能沒有 Origin header）
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     methods=["GET", "POST", "OPTIONS"],
+     allow_headers=["Content-Type"],
+     supports_credentials=False)
 
 # 初始化 ddddocr（只初始化一次，節省效能）
 ocr = ddddocr.DdddOcr(show_ad=False, beta=True)

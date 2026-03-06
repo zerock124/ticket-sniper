@@ -1,95 +1,153 @@
-<html lang="zh-TW">
+﻿<html lang="zh-TW">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tixcraft 搶票助手</title>
+    <title>Tixcraft ?�票?��?</title>
     <link rel="stylesheet" href="popup.css" />
 </head>
 
 <body>
     <div class="container">
-        <!-- 標題列 -->
+        <!-- 標�???-->
         <div class="header">
-            <span class="logo">🎟️</span>
-            <h1>Tixcraft 搶票助手</h1>
+            <span class="logo">??�?/span>
+            <h1>Tixcraft ?�票?��?</h1>
         </div>
 
-        <!-- 狀態列 + 主體雙欄佈局 -->
-        <div class="layout">
+        <!-- Tab 導覽??-->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="tab-basic">?��?設�?</button>
+            <button class="tab-btn" data-tab="tab-logic">?��??�輯</button>
+            <button class="tab-btn" data-tab="tab-run">?��??�??/button>
+        </div>
 
-            <!-- 左側：操作區塊 -->
-            <div class="panel-left">
+        <!-- Tab 1：基礎設�?-->
+        <div id="tab-basic" class="tab-panel active">
 
-                <!-- 狀態列 -->
-                <div class="status-bar" id="statusBar">
-                    <span class="status-dot idle" id="statusDot"></span>
-                    <span id="statusText">待機中</span>
-                </div>
+            <!-- 設�??�塊�??��?網�? -->
+            <div class="section">
+                <label class="label" for="targetUrl">?��?網�?</label>
+                <input type="text" id="targetUrl" class="input"
+                    placeholder="例�?：https://tixcraft.com/activity/game/..." />
+                <div class="hint">?��?辨�??�面類�??��??��?跳�??�此網�?</div>
+            </div>
 
-                <!-- OCR Server 狀態 -->
-                <div class="ocr-status-row">
-                    <span class="ocr-dot" id="ocrDot"></span>
-                    <span class="ocr-label" id="ocrLabel">OCR Server：檢查中...</span>
-                    <button id="checkOcrBtn" class="btn btn-ocr-check">🔄</button>
-                </div>
+            <!-- 設�??�塊�?購買?��? -->
+            <div class="section">
+                <label class="label" for="buyCount">購買?��?</label>
+                <input type="number" id="buyCount" class="input" min="1" max="10" value="2"
+                    placeholder="輸入購買?��?" />
+            </div>
 
-                <!-- 設定區塊：購買數量 -->
-                <div class="section">
-                    <label class="label" for="buyCount">購買數量</label>
-                    <input type="number" id="buyCount" class="input" min="1" max="10" value="2"
-                        placeholder="輸入購買數量" />
-                </div>
+            <!-- 設�??�塊�??�次?��? -->
+            <div class="section">
+                <label class="label" for="chooseDate">?�次?��?</label>
+                <input type="text" id="chooseDate" class="input"
+                    placeholder="例�?�?026/03/15" />
+                <div class="hint">輸入?��??�鍵字�??��??��?符�??�場�?/div>
+            </div>
 
-                <!-- 設定區塊：場次日期 -->
-                <div class="section">
-                    <label class="label" for="chooseDate">場次日期</label>
-                    <input type="text" id="chooseDate" class="input"
-                        placeholder="例如：2026/03/15" />
-                    <div class="hint">輸入日期關鍵字，自動選擇符合的場次</div>
-                </div>
+            <!-- 設�??�塊�??�?��??��? -->
+            <div class="section">
+                <label class="label" for="chooseArea">?�?��??��?</label>
+                <input type="text" id="chooseArea" class="input"
+                    placeholder="例�?：A?�, ?�滾?�" />
+                <div class="hint">多個�??��?以�?形逗�??��?，�?序優?�選??/div>
+            </div>
 
-                <!-- 設定區塊：區域關鍵字 -->
-                <div class="section">
-                    <label class="label" for="chooseArea">區域關鍵字</label>
-                    <input type="text" id="chooseArea" class="input"
-                        placeholder="例如：A區, 搖滾區" />
-                    <div class="hint">多個關鍵字以半形逗號分隔，依序優先選擇</div>
-                </div>
 
-                <!-- OCR API 網址設定 -->
-                <div class="section">
-                    <label class="label" for="ocrApiUrl">
-                        OCR API 網址
-                        <span class="hint">（本地驗證碼辨識服務）</span>
-                    </label>
-                    <input type="text" id="ocrApiUrl" class="input"
-                        placeholder="http://localhost:5511/ocr"
-                        value="http://localhost:5511/ocr" />
-                    <div class="hint">啟動方式：<code>python ocr_server.py</code></div>
-                </div>
+            <!-- 設定區塊：問題驗證答案 -->
+            <div class="section">
+                <label class="label" for="verifyCode">問題驗證答案</label>
+                <input type="text" id="verifyCode" class="input"
+                    placeholder="填入 /ticket/verify/ 頁面問題的答案" />
+                <div class="hint">用於答題驗證頁（部分活動需要），可留空</div>
+            </div>
+            <!-- OCR API 網�?設�? -->
+            <div class="section">
+                <label class="label" for="ocrApiUrlSelect">
+                    OCR API 網�?
+                    <span class="hint">（本?��?證碼辨�??��?�?/span>
+                </label>
+                <select id="ocrApiUrlSelect" class="input">
+                    <option value="http://1.34.200.57:5511/ocr">?�端伺�??��?1.34.200.57�?/option>
+                    <option value="http://localhost:5511/ocr" selected>?��?（localhost�?/option>
+                    <option value="__custom__">?��?輸入</option>
+                </select>
+                <input type="text" id="ocrApiUrlCustom" class="input"
+                    placeholder="http://localhost:5511/ocr"
+                    style="display:none; margin-top:4px;" />
+                <div class="hint">?��??��?�?code>python ocr_server.py</code></div>
+            </div>
 
-                <!-- 按鈕區 -->
-                <div class="button-group">
-                    <button id="startBtn" class="btn btn-start">▶ 開始搶票</button>
-                    <button id="stopBtn" class="btn btn-stop" disabled>■ 停止</button>
-                </div>
+            <button id="saveBtn" class="btn btn-save">?�� ?��?設�?</button>
+        </div><!-- /tab-basic -->
 
-                <!-- 儲存設定按鈕 -->
-                <button id="saveBtn" class="btn btn-save">💾 儲存設定</button>
+        <!-- Tab 2：執行�?�?-->
+        <div id="tab-logic" class="tab-panel">
 
-            </div><!-- /panel-left -->
+            <!-- ?��??�符?�場次�? -->
+            <div class="section">
+                <label class="label">?��??�符?�場次�?</label>
+                <select id="dateFallback" class="input">
+                    <option value="refresh">?�新?��??�面</option>
+                    <option value="select_first">?��??��?購場�?/option>
+                </select>
+            </div>
 
-            <!-- 右側：執行紀錄 -->
-            <div class="panel-right">
-                <label class="label">執行紀錄</label>
-                <div id="logArea" class="log-area"></div>
-            </div><!-- /panel-right -->
+            <!-- ?��??�符?��??��? -->
+            <div class="section">
+                <label class="label">?��??�符?��??��?</label>
+                <select id="areaFallback" class="input">
+                    <option value="refresh">?�新?��??�面</option>
+                    <option value="select_first">?��??��?購�???/option>
+                </select>
+            </div>
 
-        </div><!-- /layout -->
+            <!-- ?�整?��? -->
+            <div class="section">
+                <label class="label" for="reloadDelay">?�整?��?（�?�?/label>
+                <input type="number" id="reloadDelay" class="input" min="0.1" max="60" step="0.1" value="1"
+                    placeholder="例�?�?" />
+                <div class="hint">0.1 �?��0.1 秒�?1 �?��1 �?/div>
+            </div>
+
+            <button id="saveBtnLogic" class="btn btn-save">?�� ?��?設�?</button>
+        </div><!-- /tab-logic -->
+
+        <!-- Tab 3：執行�???-->
+        <div id="tab-run" class="tab-panel tab-run-layout">
+
+            <!-- ?�?��? -->
+            <div class="status-bar" id="statusBar">
+                <span class="status-dot idle" id="statusDot"></span>
+                <span id="statusText">待�?�?/span>
+            </div>
+
+            <!-- OCR Server ?�??-->
+            <div class="ocr-status-row">
+                <span class="ocr-dot" id="ocrDot"></span>
+                <span class="ocr-label" id="ocrLabel">OCR Server：檢?�中...</span>
+                <button id="checkOcrBtn" class="btn btn-ocr-check">??</button>
+            </div>
+
+            <!-- ?��??� -->
+            <div class="button-group">
+                <button id="startBtn" class="btn btn-start">???��??�票</button>
+                <button id="stopBtn" class="btn btn-stop" disabled>???�止</button>
+            </div>
+
+            <!-- ?��?紀??-->
+            <div class="log-header">
+                <label class="label">?��?紀??/label>
+                <button id="clearLogBtn" class="btn btn-clear-log" title="清除?�?�日�?>??�?清除</button>
+            </div>
+            <div id="logArea" class="log-area"></div>
+        </div><!-- /tab-run -->
 
         <div class="footer">
-            <span>僅適用於 tixcraft.com · 需搭配本地 OCR Server</span>
+            <span>???? tixcraft.com &middot; ????? OCR Server</span>
         </div>
     </div>
 

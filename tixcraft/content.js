@@ -59,6 +59,11 @@ if (window.__tixcraftLoaded) {
         buy_count: 2,
         choose_date: [],       // 場次日期關鍵字陣列（用於 DETAIL 頁比對場次）
         choose_area: [],       // 區域關鍵字陣列（用於 GAME 頁比對區域）
+        area_fallback: "refresh", // 找不到符合區域時的行為："refresh" 重新整理 / "select_first" 選第一個可用
+        date_fallback: "refresh", // 找不到符合場次時的行為
+        reload_delay: 1,           // 重整前等待秒數（支援小數）
+        target_url: "",            // 無法辨識頁面類型時，自動跳轉至此網址
+        verify_code: "",           // 問題驗證頁的答案（VERIFY 頁使用）
         ocr_api_url: "http://localhost:5511/ocr",
     };
 
@@ -118,27 +123,35 @@ if (window.__tixcraftLoaded) {
     }
 
     // 透過本地 OCR API 辨識驗證碼圖片
+    // 注意：不直接在 content script 發出 fetch，
+    // 因為頁面為 HTTPS，Chrome 會將 http://localhost 自動升級為 HTTPS，
+    // 造成 ERR_SSL_PROTOCOL_ERROR。改透過 background service worker 代理請求。
     async function recognizeCaptcha(imgEl) {
         sendLog("正在呼叫 OCR API 辨識驗證碼...");
         const base64 = await imageElementToBase64(imgEl);
 
-        const response = await fetch(CONFIG.ocr_api_url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: base64 }),
+        // 透過 background.js 代理發出 HTTP 請求（繞過混合內容 HTTPS 升級限制）
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage(
+                { action: "OCR_REQUEST", ocrApiUrl: CONFIG.ocr_api_url, image: base64 },
+                (resp) => {
+                    if (chrome.runtime.lastError) {
+                        return reject(new Error(chrome.runtime.lastError.message));
+                    }
+                    if (!resp.success) {
+                        return reject(new Error(resp.error));
+                    }
+                    resolve(resp.data);
+                }
+            );
         });
 
-        if (!response.ok) {
-            throw new Error(`OCR API 回應錯誤：HTTP ${response.status}`);
+        if (!result.success) {
+            throw new Error(`OCR 辨識失敗：${result.error}`);
         }
 
-        const data = await response.json();
-        if (!data.success) {
-            throw new Error(`OCR 辨識失敗：${data.error}`);
-        }
-
-        sendLog(`OCR 辨識結果：${data.code}`, "success");
-        return data.code;
+        sendLog(`OCR 辨識結果：${result.code}`, "success");
+        return result.code;
     }
 
     // 模擬真實輸入（觸發框架雙向綁定）
@@ -150,15 +163,24 @@ if (window.__tixcraftLoaded) {
         element.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
+    // 延遲指定秒數後執行重整（使用 CONFIG.reload_delay）
+    async function reloadAfterDelay() {
+        const ms = Math.max(100, CONFIG.reload_delay * 1000);
+        sendLog(`等待 ${CONFIG.reload_delay} 秒後重新整理...`, "warn");
+        await delay(ms);
+        window.location.reload();
+    }
+
     // ── 偵測當前頁面類型 ─────────────────────────────────────────
 
     function detectPageType() {
         const url = window.location.href;
-        if (url.startsWith("https://tixcraft.com/activity/detail")) return "DETAIL";   // 活動詳情
+        if (url.includes("/activity/detail")) return "DETAIL";  // 活動詳情
         if (url.includes("/activity/game")) return "DATE";                            // 場次選擇頁
-        if (url.includes("/ticket/area/")) return "GAME";                              // 選座/選區頁
-        if (url.includes("/ticket/checkout/")) return "CHECKOUT";                      // 驗證碼結帳頁
-        if (url.includes("/ticket/ticket/")) return "VERIFY";                          // 驗證頁（同結帳）
+        if (url.includes("/ticket/area/")) return "GAME";                             // 選座/選區頁
+        if (url.includes("/ticket/verify/")) return "VERIFY";                         // 驗證頁
+        if (url.includes("/ticket/checkout/")) return "CHECKOUT";                     // 驗證碼結帳頁
+        if (url == "https://tixcraft.com/") return "HOME";                   // 首頁或其他非特定頁面
         return "UNKNOWN";
     }
 
@@ -198,7 +220,7 @@ if (window.__tixcraftLoaded) {
         if (availableRows.length === 0) {
             sendLog("⚠️ 目前無可購買場次，重新整理頁面...", "warn");
             sendEvent("RELOAD");
-            window.location.reload();
+            await reloadAfterDelay();
             return false;
         }
 
@@ -217,12 +239,21 @@ if (window.__tixcraftLoaded) {
             }
         }
 
-        // 找不到指定日期 → 選第一個可用場次
+        // 找不到指定日期 → 依 date_fallback 設定決定行為
         if (!selectedRow) {
-            if (CONFIG.choose_date.length > 0) {
-                sendLog("⚠️ 找不到符合日期的場次，選擇第一個可用場次", "warn");
+            if (CONFIG.choose_date.length === 0 || CONFIG.date_fallback === "select_first") {
+                // 未設定日期關鍵字，或設定為選第一個可用場次
+                if (CONFIG.choose_date.length > 0) {
+                    sendLog("⚠️ 找不到符合日期的場次，自動選擇第一個可訂購場次", "warn");
+                }
+                selectedRow = availableRows[0];
+            } else {
+                // 重新整理頁面，等待下次嘗試
+                sendLog("⚠️ 找不到符合日期的場次，重新整理頁面...", "warn");
+                sendEvent("RELOAD");
+                await reloadAfterDelay();
+                return false;
             }
-            selectedRow = availableRows[0];
         }
 
         // 紀錄選到的場次資訊
@@ -280,7 +311,7 @@ if (window.__tixcraftLoaded) {
         if (availableLinks.length === 0) {
             sendLog("⚠️ 所有區域已售完，重新整理頁面...", "warn");
             sendEvent("RELOAD");
-            window.location.reload();
+            await reloadAfterDelay();
             return false;
         }
 
@@ -292,6 +323,13 @@ if (window.__tixcraftLoaded) {
                 // 取出 a 內所有 span 的文字合併判斷
                 const spans = Array.from(a.querySelectorAll("span"));
                 const spanText = spans.map(s => s.textContent).join(" ");
+                // 如果有tag <font> 檢查剩餘數量是否大於訂購數量
+                const qtySpan = spans.find(s => /剩餘|數量/.test(s.textContent));
+                const qtyMatch = qtySpan?.textContent.match(/(\d+)/);
+                const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : null;
+                if (qty !== null && qty < CONFIG.buy_count) {
+                    return false; // 數量不足，跳過此區域
+                }
                 // 同時也比對整個 a 的 textContent 以防沒有 span 包覆的情況
                 return spanText.includes(keyword) || a.textContent.includes(keyword);
             });
@@ -304,10 +342,19 @@ if (window.__tixcraftLoaded) {
             }
         }
 
-        // 找不到指定關鍵字 → 選第一個可用區域
+        // 找不到指定關鍵字 → 依 area_fallback 設定決定行為
         if (!selectedLink) {
-            sendLog("⚠️ 找不到指定區域關鍵字，選擇第一個可用區域", "warn");
-            selectedLink = availableLinks[0];
+            if (CONFIG.area_fallback === "select_first") {
+                // 選擇第一個可訂購區域
+                sendLog("⚠️ 找不到指定區域關鍵字，自動選擇第一個可訂購區域", "warn");
+                selectedLink = availableLinks[0];
+            } else {
+                // 預設：重新整理頁面，等待下次嘗試
+                sendLog("⚠️ 找不到指定區域關鍵字，重新整理頁面...", "warn");
+                sendEvent("RELOAD");
+                await reloadAfterDelay();
+                return false;
+            }
         }
 
         // 記錄選到的區域文字
@@ -316,6 +363,60 @@ if (window.__tixcraftLoaded) {
 
         selectedLink.click();
         sendLog("GameStep 1：已點擊區域連結");
+        return true;
+    }
+
+    // ── 問題驗證頁步驟 ─────────────────────────────────────────
+
+    /**
+     * VerifyStep：讀取 div.zone-verify 內的題目，填入答案後送出表單。
+     * 送出後會彈出瀏覽器預設 confirm，自動點選確定。
+     * 若頁面有多輪問題，每次 reload 後 content.js 會重新執行 runFlow 繼續問答。
+     */
+    async function verifyStep_answerQuestion() {
+        sendLog("等待問題驗證區塊載入...");
+        const zoneVerify = await waitForElement("div.zone-verify", 15000);
+
+        const form = zoneVerify.querySelector("form");
+        if (!form) throw new Error("找不到驗證表單");
+
+        // 讀取題目（form 內第一個 div）
+        const questionDiv = form.querySelector("div:nth-child(1)");
+        const questionText = questionDiv?.innerText?.trim() ?? "（無法讀取題目）";
+        sendLog(`驗證問題：${questionText}`);
+
+        // 找到答案輸入框（form 內第二個 div > input[name='checkCode']）
+        const answerInput = form.querySelector("div:nth-child(2) input[name='checkCode']");
+        if (!answerInput) throw new Error("找不到答案輸入框");
+
+        // 驗證答案未設定時提示並停止
+        if (!CONFIG.verify_code) {
+            sendLog("⚠️ 尚未設定驗證答案（verify_code），請在基礎設定中填入", "warn");
+            throw new Error("未設定驗證答案");
+        }
+
+        typeInput(answerInput, CONFIG.verify_code);
+        sendLog(`已填入驗證答案：${CONFIG.verify_code}`, "success");
+
+        // 找到送出按鈕（form 內第三個 div > button[type='submit']）
+        const submitBtn = form.querySelector("div:nth-child(3) button[type='submit']");
+        if (!submitBtn) throw new Error("找不到送出按鈕");
+
+        // 覆寫 window.confirm，自動點選確定（避免瀏覽器彈窗阻塞流程）
+        const originalConfirm = window.confirm;
+        window.confirm = (msg) => {
+            sendLog(`攔截到 confirm：「${msg ?? ""}」，自動確定`, "info");
+            return true;
+        };
+
+        submitBtn.click();
+        sendLog("已送出驗證表單，等待跳轉...");
+
+        // 等待一小段時間確保 confirm 已被攔截後再還原
+        await delay(500);
+        window.confirm = originalConfirm;
+
+        sendLog("驗證步驟完成", "success");
         return true;
     }
 
@@ -446,13 +547,21 @@ if (window.__tixcraftLoaded) {
     async function runFlow() {
         isRunning = true;
         shouldStop = false;
-        let errorCount = 0;
 
         const pageType = detectPageType();
         sendLog(`偵測到頁面類型：${pageType}`);
 
         try {
-            if (pageType === "DETAIL") {
+            if (pageType === "HOME") {
+                // ── 首頁流程 ─────────────────────
+                if (CONFIG.target_url) {
+                    sendLog(`跳轉至目標網址...`, "warn");
+                    window.location.href = CONFIG.target_url;
+                } else {
+                    sendLog("⚠️ 請確認已在 Tixcraft 活動頁面或設定目標網址", "warn");
+                }
+            }
+            else if (pageType === "DETAIL") {
                 // ── 活動詳情頁流程 ─────────────────────
                 sendLog("跳轉至場次選擇頁...");
                 window.location.href = "https://tixcraft.com/activity/game/" + window.location.pathname.split("/").pop();
@@ -470,7 +579,14 @@ if (window.__tixcraftLoaded) {
 
                 sendLog("活動選座步驟完成，等待跳轉至驗證碼結帳頁...", "success");
 
-            } else if (pageType === "CHECKOUT" || pageType === "VERIFY") {
+            }
+            else if (pageType === "VERIFY") {
+                // ── 問題驗證頁流程 ────────────────────────────────
+                sendLog("進入問題驗證流程...");
+                await verifyStep_answerQuestion();
+                sendLog("驗證完成，等待跳轉...", "success");
+            }
+            else if (pageType === "CHECKOUT") {
                 // ── 驗證碼結帳頁流程 ──────────────────────────────
                 sendLog("進入驗證碼結帳流程...");
 
@@ -485,22 +601,18 @@ if (window.__tixcraftLoaded) {
                 sendEvent("DONE");
 
             } else {
-                sendLog("⚠️ 無法辨識當前頁面，請確認已在 Tixcraft 活動頁面", "warn");
+                // 無法辨識頁面類型
+                sendLog("⚠️ 無法辨識當前頁面", "warn");
             }
 
         } catch (err) {
             if (err.message === "使用者已停止") {
                 sendLog("流程已停止", "warn");
             } else {
-                errorCount++;
                 sendLog(`❌ 流程錯誤：${err.message}`, "error");
-
-                if (errorCount >= 3) {
-                    sendLog("錯誤過多，重新整理頁面...", "error");
-                    sendEvent("RELOAD");
-                    window.location.reload();
-                    return;
-                }
+                sendEvent("RELOAD");
+                await reloadAfterDelay();
+                return;
             }
         } finally {
             isRunning = false;
@@ -513,6 +625,11 @@ if (window.__tixcraftLoaded) {
             CONFIG.buy_count = msg.buyCount ?? 2;
             CONFIG.choose_date = msg.chooseDate ?? [];
             CONFIG.choose_area = msg.chooseArea ?? [];
+            CONFIG.area_fallback = msg.areaFallback ?? "refresh";
+            CONFIG.date_fallback = msg.dateFallback ?? "refresh";
+            CONFIG.reload_delay = msg.reloadDelay ?? 1;
+            CONFIG.target_url = msg.targetUrl ?? "";
+            CONFIG.verify_code = msg.verifyCode ?? "";
             CONFIG.ocr_api_url = msg.ocrApiUrl ?? "http://localhost:5511/ocr";
 
             if (!isRunning) {
@@ -584,13 +701,18 @@ if (window.__tixcraftLoaded) {
         chrome.storage.local.get(["isRunning", "runningConfig"], (result) => {
             if (!result.isRunning || !result.runningConfig || isRunning) return;
             const cfg = result.runningConfig;
-            CONFIG.buy_count   = cfg.buyCount   ?? 2;
+            CONFIG.buy_count = cfg.buyCount ?? 2;
             CONFIG.choose_date = Array.isArray(cfg.chooseDate)
                 ? cfg.chooseDate
                 : (cfg.chooseDate ? cfg.chooseDate.split(",").map(s => s.trim()).filter(Boolean) : []);
             CONFIG.choose_area = Array.isArray(cfg.chooseArea)
                 ? cfg.chooseArea
                 : (cfg.chooseArea ? cfg.chooseArea.split(",").map(s => s.trim()).filter(Boolean) : []);
+            CONFIG.area_fallback = cfg.areaFallback ?? "refresh";
+            CONFIG.date_fallback = cfg.dateFallback ?? "refresh";
+            CONFIG.reload_delay = cfg.reloadDelay ?? 1;
+            CONFIG.target_url = cfg.targetUrl ?? "";
+            CONFIG.verify_code = cfg.verifyCode ?? "";
             CONFIG.ocr_api_url = cfg.ocrApiUrl ?? "http://localhost:5511/ocr";
             sendLog("偵測到搶票任務進行中，自動啟動流程...", "info");
             runFlow();
