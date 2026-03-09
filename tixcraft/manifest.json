@@ -26,6 +26,16 @@
         "https://tixcraft.com/*",
         "https://*.tixcraft.com/*"
       ],
+      "js": ["alert-override.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://tixcraft.com/*",
+        "https://*.tixcraft.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_start",
       "all_frames": true

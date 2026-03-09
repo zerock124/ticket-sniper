@@ -26,7 +26,7 @@ chrome.action.onClicked.addListener(async () => {
   const win = await chrome.windows.create({
     url: chrome.runtime.getURL("popup.html"),
     type: "popup",       // 無工具列的瀏覽器小視窗
-    width: 700,
+    width: 480,
     height: 640,
     focused: true,
   });

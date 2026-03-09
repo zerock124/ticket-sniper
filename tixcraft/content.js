@@ -74,6 +74,32 @@ if (window.__tixcraftLoaded) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    // ── 全域 alert 攔截器 ─────────────────────────────────────────
+    // alert-override.js（world: MAIN）已在 main world 覆寫 window.alert，
+    // 並透過 CustomEvent '__tixcraft_alert' 橋接回 isolated world。
+    const _alertListeners = new Set();
+    const _confirmListeners = new Set();
+    const originalAlert = window.alert;
+    window.addEventListener("__tixcraft_alert", (e) => {
+        const alertMessage = e.detail ?? "";
+        if (alertMessage.length > 0) {
+            sendLog(`⚠️ 攔截到 alert：${alertMessage}`, "warn");
+            _alertListeners.forEach(fn => fn(alertMessage));
+            _alertListeners.clear();
+            originalAlert(alertMessage);
+        }
+    });
+
+    window.addEventListener("__tixcraft_confirm", (e) => {
+        const confirmMessage = e.detail ?? "";
+        if (confirmMessage.length > 0) {
+            sendLog(`⚠️ 攔截到 confirm：${confirmMessage}`, "warn");
+            _confirmListeners.forEach(fn => fn(confirmMessage));
+            _confirmListeners.clear();
+        }
+        return true;
+    });
+
     // 傳送紀錄訊息給 popup
     function sendLog(text, type = "info") {
         console.log(`[Tixcraft助手] ${text}`);
@@ -179,7 +205,8 @@ if (window.__tixcraftLoaded) {
         if (url.includes("/activity/game")) return "DATE";                            // 場次選擇頁
         if (url.includes("/ticket/area/")) return "GAME";                             // 選座/選區頁
         if (url.includes("/ticket/verify/")) return "VERIFY";                         // 驗證頁
-        if (url.includes("/ticket/checkout/")) return "CHECKOUT";                     // 驗證碼結帳頁
+        if (url.includes("/ticket/ticket")) return "CAPTCHA";                     // 驗證碼結帳頁
+        if (url.includes("/ticket/checkout")) return "CHECKOUT";                     // 驗證碼結帳頁
         if (url == "https://tixcraft.com/") return "HOME";                   // 首頁或其他非特定頁面
         return "UNKNOWN";
     }
@@ -456,7 +483,7 @@ if (window.__tixcraftLoaded) {
         }
 
         // 填入驗證碼
-        typeInput(inputEl, code);
+        typeInput(inputEl, code + "a");
         sendLog(`已填入驗證碼：${code}`, "success");
 
         return { inputEl, retryCount };
@@ -493,32 +520,12 @@ if (window.__tixcraftLoaded) {
         );
         if (!submitBtn) throw new Error("找不到送出按鈕");
 
-        // ── 攔截 alert，偵測驗證碼錯誤 ──────────────────────────
-        // Tixcraft 驗證碼錯誤時會透過 window.alert 彈出提示，
-        // 透過覆寫 alert 將其轉為 Promise resolve，避免阻塞並取得錯誤訊息
-        let alertMessage = null;
-        const originalAlert = window.alert;
-        const alertPromise = new Promise(resolve => {
-            window.alert = (msg) => {
-                alertMessage = msg ?? "";
-                sendLog(`⚠️ 攔截到 alert：${alertMessage}`, "warn");
-                resolve(true); // 代表有 alert 觸發
-            };
-        });
-
         submitBtn.click();
         sendLog("已送出表單，等待結果...");
 
-        // 等待：alert 觸發 或 頁面跳轉（最多 4 秒）
-        const raceResult = await Promise.race([
-            alertPromise,
-            delay(4000).then(() => false),
-        ]);
-
-        // 還原原始 alert
-        window.alert = originalAlert;
-
-        const alertTriggered = raceResult === true;
+        // 等待 alert 觸發（逾時回傳 null 表示頁面正常跳轉）
+        const alertMsg = await waitForAlert(4000);
+        const alertTriggered = alertMsg !== null;
         const stillOnSamePage = window.location.href === urlBefore;
 
         if (alertTriggered || stillOnSamePage) {
@@ -586,7 +593,7 @@ if (window.__tixcraftLoaded) {
                 await verifyStep_answerQuestion();
                 sendLog("驗證完成，等待跳轉...", "success");
             }
-            else if (pageType === "CHECKOUT") {
+            else if (pageType === "CAPTCHA") {
                 // ── 驗證碼結帳頁流程 ──────────────────────────────
                 sendLog("進入驗證碼結帳流程...");
 
@@ -600,7 +607,12 @@ if (window.__tixcraftLoaded) {
                 sendLog("🎉 結帳流程完成！", "success");
                 sendEvent("DONE");
 
-            } else {
+            }
+            else if (pageType === "CHECKOUT") {
+                // 這個頁面通常是驗證碼結帳頁的下一步，已經送出訂單但尚未付款
+                sendLog("已抵達結帳頁面，等待付款...", "success");
+            }
+            else {
                 // 無法辨識頁面類型
                 sendLog("⚠️ 無法辨識當前頁面", "warn");
             }
