@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "搶票助手 Pro",
+  "version": "1.0.0",
+  "description": "KKTIX 與 Tixcraft 整合自動搶票工具，支援區域選擇、數量設定、驗證碼辨識與自動流程執行",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs",
+    "windows"
+  ],
+  "host_permissions": [
+    "https://kktix.com/*",
+    "https://*.kktix.com/*",
+    "https://tixcraft.com/*",
+    "https://*.tixcraft.com/*",
+    "http://localhost:*/*",
+    "https://localhost:*/*"
+  ],
+  "action": {
+    "default_title": "搶票助手 Pro"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://tixcraft.com/*",
+        "https://*.tixcraft.com/*"
+      ],
+      "js": ["tixcraft-alert-override.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://tixcraft.com/*",
+        "https://*.tixcraft.com/*"
+      ],
+      "js": ["tixcraft-content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://kktix.com/*",
+        "https://*.kktix.com/*"
+      ],
+      "js": ["kktix-content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
