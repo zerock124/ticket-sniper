@@ -9,6 +9,31 @@ if (window.__kktixLoaded) {
 } else {
     window.__kktixLoaded = true;
 
+    // ── 檢查全域啟用狀態 ─────────────────────────────────────────
+    let globalEnabled = true; // 預設為啟用
+    
+    // 從 storage 讀取全域開關狀態
+    chrome.storage.local.get(["globalEnabled"], (result) => {
+        globalEnabled = result.globalEnabled !== false; // 預設為 true
+        if (!globalEnabled) {
+            console.log("[搶票助手][KKTIX] 腳本注入已停用，不執行任何操作");
+        }
+    });
+
+    // 監聽全域開關狀態變更
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.action === "updateGlobalEnabled") {
+            globalEnabled = message.enabled;
+            console.log(`[搶票助手][KKTIX] 全域開關已${globalEnabled ? "啟用" : "停用"}`);
+            
+            // 如果被停用且正在執行，則停止
+            if (!globalEnabled && isRunning) {
+                shouldStop = true;
+                console.log("[搶票助手][KKTIX] 因全域開關停用，正在停止執行...");
+            }
+        }
+    });
+
     // ── 全域狀態 ─────────────────────────────────────────────────
     let isRunning = false;   // 是否正在執行
     let shouldStop = false;   // 是否被要求停止
@@ -130,7 +155,7 @@ if (window.__kktixLoaded) {
         }
 
         randomUnit = selectedUnit;
-        sendLog("Step 1 完成：已選定票種");
+        // sendLog("Step 1 完成：已選定票種");  // 簡化 LOG：移除步驟細節
     }
 
     // Step 2：選擇購買數量
@@ -148,7 +173,7 @@ if (window.__kktixLoaded) {
             throw new Error(`數量不符，期望 ${CONFIG.buy_count}，實際 ${input.value}`);
         }
 
-        sendLog(`Step 2 完成：數量設為 ${CONFIG.buy_count}`);
+        // sendLog(`Step 2 完成：數量設為 ${CONFIG.buy_count}`);  // 簡化 LOG：移除步驟細節
     }
 
     // Step 3：勾選同意條款
@@ -162,13 +187,13 @@ if (window.__kktixLoaded) {
             checkbox.click();
         }
 
-        sendLog("Step 3 完成：已勾選同意條款");
+        // sendLog("Step 3 完成：已勾選同意條款");  // 簡化 LOG：移除步驟細節
     }
 
     // Step 4：按下立即購買按鈕
     async function step4() {
         await clickWithRetry(".btn.btn-primary.btn-lg.ng-isolate-scope");
-        sendLog("Step 4 完成：已點擊立即購買");
+        // sendLog("Step 4 完成：已點擊立即購買");  // 簡化 LOG：移除步驟細節
     }
 
     // Step Q：填入會員代碼 / 問題答案
@@ -213,7 +238,7 @@ if (window.__kktixLoaded) {
             return;
         }
 
-        sendLog("票券頁面已就緒，開始執行步驟...");
+        // sendLog("票券頁面已就緒，開始執行步驟...");  // 簡化 LOG：移除步驟訊息
 
         // 逐步執行
         while (currentStep < steps.length && !shouldStop) {
@@ -271,6 +296,15 @@ if (window.__kktixLoaded) {
     // ── 監聽 popup 傳入的指令 ────────────────────────────────────
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.action === "START") {
+            // 檢查全域開關是否啟用
+            if (!globalEnabled) {
+                sendResponse({ 
+                    log: "❌ 腳本注入已停用，請在擴充功能選單中啟用「啟用腳本注入」開關", 
+                    type: "error" 
+                });
+                return true;
+            }
+
             CONFIG.buy_count = msg.buyCount ?? 1;
             CONFIG.choose_area = msg.chooseArea ?? [];
             CONFIG.membercode = msg.memberCode ?? "";

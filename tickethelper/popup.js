@@ -3,6 +3,111 @@
 //  包含 KKTIX 和 Tixcraft 兩個平台的控制邏輯
 // ============================================================
 
+// ═══════════════════════════════════════════════════════════
+//  全域 Toast 通知系統
+// ═══════════════════════════════════════════════════════════
+
+const toastEl = document.getElementById("toast");
+let toastTimeout = null;
+
+/**
+ * 顯示 Toast 通知
+ * @param {string} message - 通知訊息
+ * @param {string} type - 通知類型：success/error/warn/info
+ * @param {number} duration - 顯示時長（毫秒），預設 2500
+ */
+function showToast(message, type = "info", duration = 2500) {
+    // 清除現有的 timeout
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+        toastTimeout = null;
+    }
+
+    // 設定圖標
+    const icons = {
+        success: "✓",
+        error: "✕",
+        warn: "⚠",
+        info: "ℹ"
+    };
+
+    // 更新內容
+    toastEl.innerHTML = `
+        <span class="toast-icon">${icons[type] || icons.info}</span>
+        <span class="toast-text">${message}</span>
+    `;
+    
+    // 移除舊的類型樣式
+    toastEl.className = "toast";
+    
+    // 添加新的類型樣式並顯示
+    toastEl.classList.add(type, "show");
+
+    // 設定自動隱藏
+    toastTimeout = setTimeout(() => {
+        toastEl.classList.remove("show");
+        toastTimeout = null;
+    }, duration);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  全域啟用/停用開關
+// ═══════════════════════════════════════════════════════════
+
+const globalEnableToggle = document.getElementById("globalEnableToggle");
+
+// 載入全域啟用狀態
+chrome.storage.local.get(["globalEnabled"], (result) => {
+    const enabled = result.globalEnabled !== false; // 預設為 true
+    globalEnableToggle.checked = enabled;
+    updateToggleUI(enabled);
+});
+
+// 監聽開關變更
+globalEnableToggle.addEventListener("change", () => {
+    const enabled = globalEnableToggle.checked;
+    
+    // 儲存狀態
+    chrome.storage.local.set({ globalEnabled: enabled }, () => {
+        console.log(`[全域開關] 已${enabled ? "啟用" : "停用"}腳本注入`);
+        showToast(
+            enabled ? "腳本注入已啟用" : "腳本注入已停用", 
+            enabled ? "success" : "info"
+        );
+    });
+    
+    // 更新 UI
+    updateToggleUI(enabled);
+    
+    // 通知所有 content scripts 狀態已改變
+    chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+            chrome.tabs.sendMessage(tab.id, {
+                action: "updateGlobalEnabled",
+                enabled: enabled
+            }).catch(() => {
+                // 忽略無法傳送訊息的分頁（如 chrome:// 開頭的頁面）
+            });
+        });
+    });
+});
+
+// 更新開關 UI 狀態
+function updateToggleUI(enabled) {
+    const section = document.querySelector(".global-toggle-section");
+    if (enabled) {
+        section.style.borderColor = "#4caf50";
+        section.style.background = "rgba(76, 175, 80, 0.1)";
+    } else {
+        section.style.borderColor = "#f44336";
+        section.style.background = "rgba(244, 67, 54, 0.1)";
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  平台切換
+// ═══════════════════════════════════════════════════════════
+
 // ── 平台切換 ─────────────────────────────────────────────────────
 document.querySelectorAll(".platform-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -262,6 +367,9 @@ async function kktixSendToContent(action, data = {}) {
         await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix-content.js"] });
     } catch (_) { }
 
+    // 等待注入腳本初始化
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
         if (chrome.runtime.lastError) {
             kktixAddLog(`⚠️ 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
@@ -344,7 +452,10 @@ kktixSaveBtn.addEventListener("click", () => {
             kktix_memberCode: settings.memberCode,
             kktix_question:   settings.question,
         },
-        () => kktixAddLog("✅ KKTIX 基礎設定已儲存", "success")
+        () => {
+            showToast("KKTIX 基礎設定已儲存", "success");
+            kktixAddLog("✅ KKTIX 基礎設定已儲存", "success");
+        }
     );
 });
 
@@ -355,7 +466,10 @@ kktixSaveBtnLogic.addEventListener("click", () => {
             kktix_ticketFallback: settings.ticketFallback,
             kktix_reloadDelay:    settings.reloadDelay,
         },
-        () => kktixAddLog("✅ KKTIX 執行邏輯已儲存", "success")
+        () => {
+            showToast("KKTIX 執行邏輯已儲存", "success");
+            kktixAddLog("✅ KKTIX 執行邏輯已儲存", "success");
+        }
     );
 });
 
@@ -709,7 +823,10 @@ tcSaveBtn.addEventListener("click", () => {
             tixcraft_targetUrl:   settings.targetUrl,
             tixcraft_verifyCode:  settings.verifyCode,
         },
-        () => tcAddLog("✅ Tixcraft 基礎設定已儲存", "success")
+        () => {
+            showToast("Tixcraft 基礎設定已儲存", "success");
+            tcAddLog("✅ Tixcraft 基礎設定已儲存", "success");
+        }
     );
 });
 
@@ -721,7 +838,10 @@ tcSaveBtnLogic.addEventListener("click", () => {
             tixcraft_dateFallback: settings.dateFallback,
             tixcraft_reloadDelay:  settings.reloadDelay,
         },
-        () => tcAddLog("✅ Tixcraft 執行邏輯已儲存", "success")
+        () => {
+            showToast("Tixcraft 執行邏輯已儲存", "success");
+            tcAddLog("✅ Tixcraft 執行邏輯已儲存", "success");
+        }
     );
 });
 

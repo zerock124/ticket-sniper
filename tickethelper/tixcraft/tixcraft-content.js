@@ -1,5 +1,5 @@
 // ============================================================
-//  content.js — Tixcraft 搶票助手 內容腳本
+//  tixcraft-content.js — Tixcraft 搶票助手 內容腳本（整合版）
 //  負責在 Tixcraft 頁面上執行自動搶票流程
 //
 //  流程說明：
@@ -12,19 +12,43 @@
 
 // 防止重複注入：同一頁面已載入時直接略過，reload 後旗標消失會重新初始化
 if (window.__tixcraftLoaded) {
-    console.log("[Tixcraft助手] content.js 已載入，略過重複注入");
+    console.log("[搶票助手][Tixcraft] content.js 已載入，略過重複注入");
 } else {
     window.__tixcraftLoaded = true;
+
+    // ── 檢查全域啟用狀態 ─────────────────────────────────────────
+    let globalEnabled = true; // 預設為啟用
+
+    // 從 storage 讀取全域開關狀態
+    chrome.storage.local.get(["globalEnabled"], (result) => {
+        globalEnabled = result.globalEnabled !== false; // 預設為 true
+        if (!globalEnabled) {
+            console.log("[搶票助手][Tixcraft] 腳本注入已停用，不執行任何操作");
+        }
+    });
+
+    // 監聽全域開關狀態變更
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.action === "updateGlobalEnabled") {
+            globalEnabled = message.enabled;
+            console.log(`[搶票助手][Tixcraft] 全域開關已${globalEnabled ? "啟用" : "停用"}`);
+
+            // 如果被停用且正在執行，則停止
+            if (!globalEnabled && isRunning) {
+                shouldStop = true;
+                console.log("[搶票助手][Tixcraft] 因全域開關停用，正在停止執行...");
+            }
+        }
+    });
 
     // ── 全域狀態 ─────────────────────────────────────────────────
     let isRunning = false;
     let shouldStop = false;
 
     // ── 網路請求追蹤器 ────────────────────────────────────────────
-    // 計算目前進行中的 XHR / fetch 請求數量
     let _pendingRequests = 0;
 
-    // 攔截 XMLHttpRequest：在 open 時計數加一，請求結束時計數減一
+    // 攔截 XMLHttpRequest 追蹤進行中的請求數量
     (function patchXHR() {
         const OrigXHR = window.XMLHttpRequest;
         function PatchedXHR() {
@@ -43,7 +67,7 @@ if (window.__tixcraftLoaded) {
         window.XMLHttpRequest = PatchedXHR;
     })();
 
-    // 攔截 fetch：呼叫前計數加一，Promise 結束後計數減一
+    // 攔截 fetch 追蹤進行中的請求數量
     (function patchFetch() {
         const origFetch = window.fetch;
         window.fetch = function (...args) {
@@ -57,58 +81,70 @@ if (window.__tixcraftLoaded) {
     // 目前執行參數（由 popup 傳入）
     let CONFIG = {
         buy_count: 2,
-        choose_date: [],       // 場次日期關鍵字陣列（用於 DETAIL 頁比對場次）
-        choose_area: [],       // 區域關鍵字陣列（用於 GAME 頁比對區域）
-        area_fallback: "refresh", // 找不到符合區域時的行為："refresh" 重新整理 / "select_first" 選第一個可用
-        date_fallback: "refresh", // 找不到符合場次時的行為
-        reload_delay: 1,           // 重整前等待秒數（支援小數）
-        target_url: "",            // 無法辨識頁面類型時，自動跳轉至此網址
-        verify_code: "",           // 問題驗證頁的答案（VERIFY 頁使用）
+        choose_date: [],
+        choose_area: [],
+        area_fallback: "refresh",
+        date_fallback: "refresh",
+        reload_delay: 1,
+        target_url: "",
+        verify_code: "",
         ocr_api_url: "http://localhost:5511/ocr",
     };
 
     // ── 工具函式 ─────────────────────────────────────────────────
 
-    // 延遲
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     // ── 全域 alert 攔截器 ─────────────────────────────────────────
-    // alert-override.js（world: MAIN）已在 main world 覆寫 window.alert，
+    // tixcraft-alert-override.js（world: MAIN）已在 main world 覆寫 window.alert，
     // 並透過 CustomEvent '__tixcraft_alert' 橋接回 isolated world。
     const _alertListeners = new Set();
     const _confirmListeners = new Set();
     const originalAlert = window.alert;
+
     window.addEventListener("__tixcraft_alert", (e) => {
         const alertMessage = e.detail ?? "";
         if (alertMessage.length > 0) {
             sendLog(`⚠️ 攔截到 alert：${alertMessage}`, "warn");
             _alertListeners.forEach(fn => fn(alertMessage));
             _alertListeners.clear();
-            originalAlert(alertMessage);
+            //originalAlert(alertMessage);
         }
     });
 
     window.addEventListener("__tixcraft_confirm", (e) => {
+        console.log(e);
         const confirmMessage = e.detail ?? "";
         if (confirmMessage.length > 0) {
             sendLog(`⚠️ 攔截到 confirm：${confirmMessage}`, "warn");
             _confirmListeners.forEach(fn => fn(confirmMessage));
             _confirmListeners.clear();
         }
-        return true;
     });
+
+    // 等待 alert 事件（由 alert-override.js 橋接），或逾時後回傳 null
+    function waitForAlert(timeout = 5000) {
+        return new Promise((resolve) => {
+            const handler = (msg) => resolve(msg);
+            _alertListeners.add(handler);
+            setTimeout(() => {
+                _alertListeners.delete(handler);
+                resolve(null);
+            }, timeout);
+        });
+    }
 
     // 傳送紀錄訊息給 popup
     function sendLog(text, type = "info") {
-        console.log(`[Tixcraft助手] ${text}`);
-        chrome.runtime.sendMessage({ from: "content", event: "LOG", text, type });
+        console.log(`[搶票助手][Tixcraft] ${text}`);
+        chrome.runtime.sendMessage({ from: "tixcraft-content", event: "LOG", text, type });
     }
 
     // 傳送事件給 popup
     function sendEvent(event, extra = {}) {
-        chrome.runtime.sendMessage({ from: "content", event, ...extra });
+        chrome.runtime.sendMessage({ from: "tixcraft-content", event, ...extra });
     }
 
     // 等待指定 selector 出現（最多等待 timeout ms）
@@ -125,7 +161,6 @@ if (window.__tixcraftLoaded) {
     // 將圖片元素轉為 Base64 字串（透過 Canvas）
     async function imageElementToBase64(imgEl) {
         return new Promise((resolve, reject) => {
-            // 若圖片尚未載入完成，等待 load 事件
             const doConvert = () => {
                 try {
                     const canvas = document.createElement("canvas");
@@ -148,15 +183,11 @@ if (window.__tixcraftLoaded) {
         });
     }
 
-    // 透過本地 OCR API 辨識驗證碼圖片
-    // 注意：不直接在 content script 發出 fetch，
-    // 因為頁面為 HTTPS，Chrome 會將 http://localhost 自動升級為 HTTPS，
-    // 造成 ERR_SSL_PROTOCOL_ERROR。改透過 background service worker 代理請求。
+    // 透過 background.js 代理呼叫本地 OCR API（繞過 HTTPS 混合內容限制）
     async function recognizeCaptcha(imgEl) {
-        sendLog("正在呼叫 OCR API 辨識驗證碼...");
+        // sendLog("正在呼叫 OCR API 辨識驗證碼...");  // 簡化 LOG：移除過程訊息
         const base64 = await imageElementToBase64(imgEl);
 
-        // 透過 background.js 代理發出 HTTP 請求（繞過混合內容 HTTPS 升級限制）
         const result = await new Promise((resolve, reject) => {
             chrome.runtime.sendMessage(
                 { action: "OCR_REQUEST", ocrApiUrl: CONFIG.ocr_api_url, image: base64 },
@@ -189,7 +220,7 @@ if (window.__tixcraftLoaded) {
         element.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    // 延遲指定秒數後執行重整（使用 CONFIG.reload_delay）
+    // 延遲指定秒數後重整
     async function reloadAfterDelay() {
         const ms = Math.max(100, CONFIG.reload_delay * 1000);
         sendLog(`等待 ${CONFIG.reload_delay} 秒後重新整理...`, "warn");
@@ -201,35 +232,23 @@ if (window.__tixcraftLoaded) {
 
     function detectPageType() {
         const url = window.location.href;
-        if (url.includes("/activity/detail")) return "DETAIL";  // 活動詳情
-        if (url.includes("/activity/game")) return "DATE";                            // 場次選擇頁
-        if (url.includes("/ticket/area/")) return "GAME";                             // 選座/選區頁
-        if (url.includes("/ticket/verify/")) return "VERIFY";                         // 驗證頁
-        if (url.includes("/ticket/ticket")) return "CAPTCHA";                     // 驗證碼結帳頁
-        if (url.includes("/ticket/checkout")) return "CHECKOUT";                     // 驗證碼結帳頁
-        if (url == "https://tixcraft.com/") return "HOME";                   // 首頁或其他非特定頁面
+        if (url.includes("/activity/detail")) return "DETAIL";
+        if (url.includes("/activity/game")) return "DATE";
+        if (url.includes("/ticket/area/")) return "GAME";
+        if (url.includes("/ticket/verify/")) return "VERIFY";
+        if (url.includes("/ticket/ticket")) return "CAPTCHA";
+        if (url.includes("/ticket/checkout")) return "CHECKOUT";
+        if (url.includes("/ticket/order")) return "DONE";
+        if (url === "https://tixcraft.com/") return "HOME";
         return "UNKNOWN";
     }
 
-    // ── 活動詳情頁步驟 ──────────────────────────────────────────────
+    // ── 活動詳情頁步驟 ────────────────────────────────────────────
 
-    /**
-     * DetailStep：從 #gameList 的場次表格中，依 choose_area 優先順序
-     * 比對「節目名稱（td[1]）」或「節目地點（td[2]）」，
-     * 找到符合的場次後點擊該列 td[3] 內的「立即訂購」按鈕。
-     *
-     * 場次表格結構：
-     *   div#gameList > table > tbody > tr
-     *     td[0] 場次時間
-     *     td[1] 節目名稱
-     *     td[2] 節目地點
-     *     td[3] 立即訂購按鈕（button）
-     */
     async function detailStep_selectSession() {
-        sendLog("等待場次列表載入...");
+        // sendLog("等待場次列表載入...");  // 簡化 LOG：移除等待訊息
         await waitForElement("#gameList", 15000);
 
-        // 取出所有場次列
         const rows = Array.from(
             document.querySelectorAll("#gameList table tbody tr")
         );
@@ -238,7 +257,6 @@ if (window.__tixcraftLoaded) {
             throw new Error("找不到場次列表，請確認已在活動詳情頁面");
         }
 
-        // 過濾出有「立即訂購」按鈕的可購買場次（按鈕存在且未 disabled）
         const availableRows = rows.filter(row => {
             const btn = row.querySelector("td:nth-child(4) button, td:nth-child(4) a");
             return btn && !btn.disabled && btn.offsetParent !== null;
@@ -251,7 +269,6 @@ if (window.__tixcraftLoaded) {
             return false;
         }
 
-        // 依 choose_date 優先順序比對場次時間（td[0]）
         let selectedRow = null;
 
         for (const keyword of CONFIG.choose_date) {
@@ -266,16 +283,13 @@ if (window.__tixcraftLoaded) {
             }
         }
 
-        // 找不到指定日期 → 依 date_fallback 設定決定行為
         if (!selectedRow) {
             if (CONFIG.choose_date.length === 0 || CONFIG.date_fallback === "select_first") {
-                // 未設定日期關鍵字，或設定為選第一個可用場次
                 if (CONFIG.choose_date.length > 0) {
                     sendLog("⚠️ 找不到符合日期的場次，自動選擇第一個可訂購場次", "warn");
                 }
                 selectedRow = availableRows[0];
             } else {
-                // 重新整理頁面，等待下次嘗試
                 sendLog("⚠️ 找不到符合日期的場次，重新整理頁面...", "warn");
                 sendEvent("RELOAD");
                 await reloadAfterDelay();
@@ -283,35 +297,23 @@ if (window.__tixcraftLoaded) {
             }
         }
 
-        // 紀錄選到的場次資訊
         const time = selectedRow.querySelector("td:nth-child(1)")?.innerText?.trim() ?? "";
         const name = selectedRow.querySelector("td:nth-child(2)")?.innerText?.trim() ?? "";
         const location = selectedRow.querySelector("td:nth-child(3)")?.innerText?.trim() ?? "";
         sendLog(`選定場次：${time} ／ ${name} ／ ${location}`);
 
-        // 點擊「立即訂購」按鈕，並等待網路請求完成後再繼續
         const buyBtn = selectedRow.querySelector("td:nth-child(4) button, td:nth-child(4) a");
         buyBtn.click();
-        sendLog("DetailStep：已點擊立即訂購");
+        // sendLog("DetailStep：已點擊立即訂購");  // 簡化 LOG：移除技術細節
         return true;
     }
 
     // ── 選座頁步驟 ───────────────────────────────────────────────
 
-    /**
-     * GameStep 1：在票種表格中選擇指定區域並點擊「立即購票」
-     *
-     * Tixcraft 的票種表格結構：
-     *   table.zone_list > tbody > tr
-     *     td（區域名稱）、td（剩餘數量）、td（價格）、td（購買連結）
-     */
     async function gameStep1_selectZone() {
-        sendLog("等待區域選擇區塊載入...");
-
-        // 等待主容器 div.zone.area-list 出現
+        // sendLog("等待區域選擇區塊載入...");  // 簡化 LOG：移除等待訊息
         await waitForElement("div.zone.area-list", 15000);
 
-        // 取出所有區域連結：div.zone.area-list > ul.area-list > li > a
         const allLinks = Array.from(
             document.querySelectorAll("div.zone.area-list ul.area-list li a")
         );
@@ -320,8 +322,6 @@ if (window.__tixcraftLoaded) {
             throw new Error("找不到任何區域連結，請確認已在票種選擇頁面");
         }
 
-        // 過濾掉已售完的連結
-        // 售完狀態通常帶有 disabled class、aria-disabled 或父層 li 有 soldout class
         const availableLinks = allLinks.filter(a => {
             const li = a.closest("li");
             const text = a.textContent || "";
@@ -342,41 +342,33 @@ if (window.__tixcraftLoaded) {
             return false;
         }
 
-        // 依 choose_area 優先順序比對 <a> 內的 span 文字（包含區域名稱與價格）
         let selectedLink = null;
 
         for (const keyword of CONFIG.choose_area) {
             const matched = availableLinks.filter(a => {
-                // 取出 a 內所有 span 的文字合併判斷
                 const spans = Array.from(a.querySelectorAll("span"));
                 const spanText = spans.map(s => s.textContent).join(" ");
-                // 如果有tag <font> 檢查剩餘數量是否大於訂購數量
                 const qtySpan = spans.find(s => /剩餘|數量/.test(s.textContent));
                 const qtyMatch = qtySpan?.textContent.match(/(\d+)/);
                 const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : null;
                 if (qty !== null && qty < CONFIG.buy_count) {
                     return false; // 數量不足，跳過此區域
                 }
-                // 同時也比對整個 a 的 textContent 以防沒有 span 包覆的情況
                 return spanText.includes(keyword) || a.textContent.includes(keyword);
             });
 
             if (matched.length > 0) {
-                // 隨機從符合的連結中選一個（避免所有人搶同一個）
                 selectedLink = matched[Math.floor(Math.random() * matched.length)];
                 sendLog(`依優先順序選擇區域「${keyword}」`, "success");
                 break;
             }
         }
 
-        // 找不到指定關鍵字 → 依 area_fallback 設定決定行為
         if (!selectedLink) {
             if (CONFIG.area_fallback === "select_first") {
-                // 選擇第一個可訂購區域
                 sendLog("⚠️ 找不到指定區域關鍵字，自動選擇第一個可訂購區域", "warn");
                 selectedLink = availableLinks[0];
             } else {
-                // 預設：重新整理頁面，等待下次嘗試
                 sendLog("⚠️ 找不到指定區域關鍵字，重新整理頁面...", "warn");
                 sendEvent("RELOAD");
                 await reloadAfterDelay();
@@ -384,119 +376,75 @@ if (window.__tixcraftLoaded) {
             }
         }
 
-        // 記錄選到的區域文字
         const zoneText = selectedLink.textContent.trim().replace(/\s+/g, " ");
         sendLog(`選定區域：${zoneText}`);
 
         selectedLink.click();
-        sendLog("GameStep 1：已點擊區域連結");
+        // sendLog("GameStep 1：已點擊區域連結");  // 簡化 LOG：移除技術細節
         return true;
     }
 
-    // ── 問題驗證頁步驟 ─────────────────────────────────────────
+    // ── 問題驗證頁步驟 ────────────────────────────────────────────
 
-    /**
-     * VerifyStep：讀取 div.zone-verify 內的題目，填入答案後送出表單。
-     * 送出後會彈出瀏覽器預設 confirm，自動點選確定。
-     * 若頁面有多輪問題，每次 reload 後 content.js 會重新執行 runFlow 繼續問答。
-     */
     async function verifyStep_answerQuestion() {
-        sendLog("等待問題驗證區塊載入...");
+        // sendLog("等待問題驗證區塊載入...");  // 簡化 LOG：移除等待訊息
         const zoneVerify = await waitForElement("div.zone-verify", 15000);
 
         const form = zoneVerify.querySelector("form");
         if (!form) throw new Error("找不到驗證表單");
 
-        // 讀取題目（form 內第一個 div）
         const questionDiv = form.querySelector("div:nth-child(1)");
         const questionText = questionDiv?.innerText?.trim() ?? "（無法讀取題目）";
-        sendLog(`驗證問題：${questionText}`);
+        // sendLog(`驗證問題：${questionText}`);  // 簡化 LOG：移除問題詳情
 
-        // 找到答案輸入框（form 內第二個 div > input[name='checkCode']）
         const answerInput = form.querySelector("div:nth-child(2) input[name='checkCode']");
         if (!answerInput) throw new Error("找不到答案輸入框");
 
-        // 驗證答案未設定時提示並停止
         if (!CONFIG.verify_code) {
             sendLog("⚠️ 尚未設定驗證答案（verify_code），請在基礎設定中填入", "warn");
             throw new Error("未設定驗證答案");
         }
 
         typeInput(answerInput, CONFIG.verify_code);
-        sendLog(`已填入驗證答案：${CONFIG.verify_code}`, "success");
+        sendLog("✅ 已填入驗證答案", "success");
 
-        // 找到送出按鈕（form 內第三個 div > button[type='submit']）
-        const submitBtn = form.querySelector("div:nth-child(3) button[type='submit']");
+        const submitBtn = form.querySelector("button[type='submit']");
         if (!submitBtn) throw new Error("找不到送出按鈕");
 
-        // 覆寫 window.confirm，自動點選確定（避免瀏覽器彈窗阻塞流程）
-        const originalConfirm = window.confirm;
-        window.confirm = (msg) => {
-            sendLog(`攔截到 confirm：「${msg ?? ""}」，自動確定`, "info");
-            return true;
-        };
-
         submitBtn.click();
-        sendLog("已送出驗證表單，等待跳轉...");
+        // sendLog("已送出驗證表單，等待跳轉...");  // 簡化 LOG：移除過程訊息
 
-        // 等待一小段時間確保 confirm 已被攔截後再還原
-        await delay(500);
-        window.confirm = originalConfirm;
-
-        sendLog("驗證步驟完成", "success");
         return true;
     }
 
     // ── 驗證碼結帳頁步驟 ─────────────────────────────────────────
 
-    /**
-     * CheckoutStep 1：辨識並填入驗證碼
-     *
-     * Tixcraft 結帳頁驗證碼結構：
-     *   <img id="yw0"> 或 <img class="captcha-img">  – 驗證碼圖片
-     *   <input id="RegistrationForm_verifyCode">      – 驗證碼輸入框
-     */
     async function checkoutStep1_captcha(retryCount = 0) {
-        const MAX_RETRIES = 5;
-        sendLog(`辨識驗證碼（第 ${retryCount + 1} 次）...`);
+        // sendLog(`辨識驗證碼（第 ${retryCount + 1} 次）...`);  // 簡化 LOG：移除過程訊息
 
-        // 找到驗證碼圖片
-        const imgEl = document.querySelector(
-            "#TicketForm_verifyCode-image"
-        );
+        const imgEl = document.querySelector("#TicketForm_verifyCode-image");
         if (!imgEl) throw new Error("找不到驗證碼圖片");
 
-        // 找到驗證碼輸入框
-        const inputEl = document.querySelector(
-            "#TicketForm_verifyCode"
-        );
+        const inputEl = document.querySelector("#TicketForm_verifyCode");
         if (!inputEl) throw new Error("找不到驗證碼輸入框");
 
         let code;
         try {
             code = await recognizeCaptcha(imgEl);
         } catch (e) {
-            // OCR API 呼叫失敗（Server 未啟動等）
             sendLog(`❌ OCR 失敗：${e.message}`, "error");
             sendLog("請確認本地 OCR Server 已啟動（python ocr_server.py）", "error");
             throw e;
         }
 
-        // 填入驗證碼
         typeInput(inputEl, code + "a");
-        sendLog(`已填入驗證碼：${code}`, "success");
+        // sendLog(`已填入驗證碼：${code}`, "success");  // 簡化 LOG：移除填入訊息
 
         return { inputEl, retryCount };
     }
 
-    /**
-     * CheckoutStep 2：送出表單並等待結果
-     * 若驗證碼錯誤，自動重試（換新圖片再辨識）
-     */
     async function checkoutStep2_submit(inputEl, retryCount = 0) {
         const MAX_RETRIES = 5;
-
-        // 記錄送出前的 URL，用於偵測是否成功跳轉
         const urlBefore = window.location.href;
 
         // 選擇購票數量
@@ -504,49 +452,23 @@ if (window.__tixcraftLoaded) {
         if (qtySelect) {
             qtySelect.value = CONFIG.buy_count;
             qtySelect.dispatchEvent(new Event("change", { bubbles: true }));
-            sendLog(`已設置購買數量為 ${CONFIG.buy_count} 張`);
+            // sendLog(`已設置購買數量為 ${CONFIG.buy_count} 張`);  // 簡化 LOG：移除設置訊息
         }
 
         // 勾選同意條款
         const agreeCheckbox = document.querySelector("input[name='agree'], input[type='checkbox'], input#TicketForm_agree");
         if (agreeCheckbox && !agreeCheckbox.checked) {
             agreeCheckbox.click();
-            sendLog("已勾選同意條款");
+            // sendLog("已勾選同意條款");  // 簡化 LOG：移除勾選訊息
         }
 
-        // 送出表單
         const submitBtn = document.querySelector(
             "input[type='submit'], button[type='submit'], .btn-primary[type='submit']"
         );
         if (!submitBtn) throw new Error("找不到送出按鈕");
 
         submitBtn.click();
-        sendLog("已送出表單，等待結果...");
-
-        // 等待 alert 觸發（逾時回傳 null 表示頁面正常跳轉）
-        const alertMsg = await waitForAlert(4000);
-        const alertTriggered = alertMsg !== null;
-        const stillOnSamePage = window.location.href === urlBefore;
-
-        if (alertTriggered || stillOnSamePage) {
-            if (retryCount >= MAX_RETRIES) {
-                throw new Error(`驗證碼辨識失敗超過 ${MAX_RETRIES} 次，請手動操作`);
-            }
-
-            sendLog(`⚠️ 驗證碼錯誤，重新辨識（第 ${retryCount + 2} 次）...`, "warn");
-
-            // 點擊驗證碼圖片以刷新，並等待新圖片的網路請求完成
-            const imgEl = document.querySelector("#TicketForm_verifyCode-image");
-            if (imgEl) {
-                imgEl.click();
-            }
-
-            // 遞迴重試
-            const { inputEl: newInput } = await checkoutStep1_captcha(retryCount + 1);
-            await checkoutStep2_submit(newInput, retryCount + 1);
-        } else {
-            sendLog("✅ 驗證碼正確，表單已送出！", "success");
-        }
+        // sendLog("已送出表單，等待結果...");  // 簡化 LOG：移除過程訊息
     }
 
     // ── 主流程 ──────────────────────────────────────────────────
@@ -556,64 +478,53 @@ if (window.__tixcraftLoaded) {
         shouldStop = false;
 
         const pageType = detectPageType();
-        sendLog(`偵測到頁面類型：${pageType}`);
+        // sendLog(`偵測到頁面類型：${pageType}`);  // 簡化 LOG：移除偵測訊息
 
         try {
             if (pageType === "HOME") {
-                // ── 首頁流程 ─────────────────────
                 if (CONFIG.target_url) {
-                    sendLog(`跳轉至目標網址...`, "warn");
+                    sendLog("跳轉至目標網址", "info");
                     window.location.href = CONFIG.target_url;
                 } else {
                     sendLog("⚠️ 請確認已在 Tixcraft 活動頁面或設定目標網址", "warn");
                 }
             }
             else if (pageType === "DETAIL") {
-                // ── 活動詳情頁流程 ─────────────────────
-                sendLog("跳轉至場次選擇頁...");
+                // sendLog("跳轉至場次選擇頁...");  // 簡化 LOG：移除跳轉訊息
                 window.location.href = "https://tixcraft.com/activity/game/" + window.location.pathname.split("/").pop();
-            } else if (pageType === "DATE") {
-                sendLog("進入場次選擇流程...");
+            }
+            else if (pageType === "DATE") {
+                // sendLog("進入場次選擇流程...");  // 簡化 LOG：移除進入訊息
                 const selected = await detailStep_selectSession();
-                if (!selected) return; // 無可購買場次，觸發 reload
-                sendLog("場次選擇完成，等待跳轉至選座頁...", "success");
+                if (!selected) return;
+                // sendLog("場次選擇完成，等待跳轉至選座頁...", "success");  // 簡化 LOG：移除等待訊息
             }
             else if (pageType === "GAME") {
-                // ── 活動選座頁流程 ────────────────────────────────
-                sendLog("進入活動票種選擇流程...");
+                // sendLog("進入活動票種選擇流程...");  // 簡化 LOG：移除進入訊息
                 const selected = await gameStep1_selectZone();
-                if (!selected) return; // 已售完，觸發 reload
-
-                sendLog("活動選座步驟完成，等待跳轉至驗證碼結帳頁...", "success");
-
+                if (!selected) return;
+                // sendLog("活動選座步驟完成，等待跳轉至驗證碼結帳頁...", "success");  // 簡化 LOG：移除等待訊息
             }
             else if (pageType === "VERIFY") {
-                // ── 問題驗證頁流程 ────────────────────────────────
-                sendLog("進入問題驗證流程...");
+                // sendLog("進入問題驗證流程...");  // 簡化 LOG：移除進入訊息
                 await verifyStep_answerQuestion();
-                sendLog("驗證完成，等待跳轉...", "success");
+                sendLog("✅ 驗證完成", "success");
             }
             else if (pageType === "CAPTCHA") {
-                // ── 驗證碼結帳頁流程 ──────────────────────────────
-                sendLog("進入驗證碼結帳流程...");
-
-                // 等待驗證碼圖片出現
+                // sendLog("進入驗證碼結帳流程...");  // 簡化 LOG：移除進入訊息
                 await waitForElement("#TicketForm_verifyCode-image", 10000);
-
                 const { inputEl, retryCount } = await checkoutStep1_captcha(0);
-
                 await checkoutStep2_submit(inputEl, retryCount);
-
-                sendLog("🎉 結帳流程完成！", "success");
+                sendLog("🎉 購票成功！", "success");
                 sendEvent("DONE");
-
             }
             else if (pageType === "CHECKOUT") {
-                // 這個頁面通常是驗證碼結帳頁的下一步，已經送出訂單但尚未付款
-                sendLog("已抵達結帳頁面，等待付款...", "success");
+                sendLog("✅ 已進入結帳頁", "success");
+            }
+            else if (pageType === "DONE") {
+                sendLog("🎉 已完成訂單，請前往付款！", "success");
             }
             else {
-                // 無法辨識頁面類型
                 sendLog("⚠️ 無法辨識當前頁面", "warn");
             }
 
@@ -634,6 +545,15 @@ if (window.__tixcraftLoaded) {
     // ── 監聽 popup 傳入的指令 ────────────────────────────────────
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.action === "START") {
+            // 檢查全域開關是否啟用
+            if (!globalEnabled) {
+                sendResponse({
+                    log: "❌ 腳本注入已停用，請在擴充功能選單中啟用「啟用腳本注入」開關",
+                    type: "error"
+                });
+                return true;
+            }
+
             CONFIG.buy_count = msg.buyCount ?? 2;
             CONFIG.choose_date = msg.chooseDate ?? [];
             CONFIG.choose_area = msg.chooseArea ?? [];
@@ -661,21 +581,21 @@ if (window.__tixcraftLoaded) {
         }
     });
 
-    // ── 通知 Discord Webhook（當到達結帳頁時觸發）─────────────────
-    const WEBHOOK_URL =
+    // ── Discord 通知（抵達結帳頁時觸發）──────────────────────────
+    const TIXCRAFT_WEBHOOK_URL =
         "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN";
 
-    async function notify() {
-        if (WEBHOOK_URL.includes("YOUR_WEBHOOK")) return; // 尚未設定，略過
+    async function notifyTixcraft() {
+        if (TIXCRAFT_WEBHOOK_URL.includes("YOUR_WEBHOOK")) return; // 尚未設定，略過
         try {
-            await fetch(WEBHOOK_URL, {
+            await fetch(TIXCRAFT_WEBHOOK_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     username: "Tixcraft 搶票通知",
                     embeds: [
                         {
-                            title: "🚨 搶票通知",
+                            title: "🚨 Tixcraft 搶票通知",
                             description: "已抵達結帳頁面！請前往付款",
                             color: 0x00ff00,
                             fields: [
@@ -698,7 +618,7 @@ if (window.__tixcraftLoaded) {
             const url = window.location.href;
             if (url.includes("/ticket/checkout/") || url.includes("/ticket/verify/")) {
                 checkoutObserver.disconnect();
-                notify();
+                notifyTixcraft();
             }
         });
         checkoutObserver.observe(document.body, { childList: true, subtree: true });
@@ -707,12 +627,13 @@ if (window.__tixcraftLoaded) {
     // DOM 就緒後：設定 Observer，並自動從 storage 恢復執行狀態
     function onDomReady() {
         setupCheckoutObserver();
-        sendLog("Tixcraft 搶票助手已注入頁面 ✅", "success");
+        // sendLog("Tixcraft 搶票助手已注入頁面 ✅", "success");  // 簡化 LOG：移除注入訊息
 
         // 若 storage 記錄為執行中，無需等待 background.js 訊息，直接自啟動
-        chrome.storage.local.get(["isRunning", "runningConfig"], (result) => {
-            if (!result.isRunning || !result.runningConfig || isRunning) return;
-            const cfg = result.runningConfig;
+        // 使用 tixcraft_ 前綴命名空間，避免與 KKTIX 設定衝突
+        chrome.storage.local.get(["tixcraft_isRunning", "tixcraft_runningConfig"], (result) => {
+            if (!result.tixcraft_isRunning || !result.tixcraft_runningConfig || isRunning) return;
+            const cfg = result.tixcraft_runningConfig;
             CONFIG.buy_count = cfg.buyCount ?? 2;
             CONFIG.choose_date = Array.isArray(cfg.chooseDate)
                 ? cfg.chooseDate
@@ -726,7 +647,7 @@ if (window.__tixcraftLoaded) {
             CONFIG.target_url = cfg.targetUrl ?? "";
             CONFIG.verify_code = cfg.verifyCode ?? "";
             CONFIG.ocr_api_url = cfg.ocrApiUrl ?? "http://localhost:5511/ocr";
-            sendLog("偵測到搶票任務進行中，自動啟動流程...", "info");
+            sendLog("⚙️ 自動啟動搜票流程", "info");
             runFlow();
         });
     }

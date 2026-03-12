@@ -55,6 +55,149 @@ body {
   margin-left: 2px;
 }
 
+/* ── 全域啟用開關 ──────────────────────────────────────────── */
+.global-toggle-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #1a1a26;
+  border: 1px solid #2e2e42;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toggle-icon {
+  font-size: 16px;
+}
+
+.toggle-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+/* 開關按鈕樣式 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #444;
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4caf50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Toast 通知 ──────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100px);
+  background: #1e1e2e;
+  color: #e0e0e0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #2e2e42;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+  max-width: 260px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.toast.success {
+  background: linear-gradient(135deg, #4caf50, #388e3c);
+  border-color: #66bb6a;
+  color: #fff;
+}
+
+.toast.error {
+  background: linear-gradient(135deg, #ef5350, #c62828);
+  border-color: #e57373;
+  color: #fff;
+}
+
+.toast.warn {
+  background: linear-gradient(135deg, #ffb300, #f57c00);
+  border-color: #ffc107;
+  color: #fff;
+}
+
+.toast.info {
+  background: linear-gradient(135deg, #42a5f5, #1976d2);
+  border-color: #64b5f6;
+  color: #fff;
+}
+
+.toast-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.toast-text {
+  flex: 1;
+}
+
 /* ── 平台切換列 ──────────────────────────────────────────── */
 .platform-nav {
   display: flex;

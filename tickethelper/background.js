@@ -8,7 +8,7 @@
 // ============================================================
 
 // 網址匹配規則
-const KKTIX_PATTERN    = /^https:\/\/([a-z0-9-]+\.)?kktix\.com\//;
+const KKTIX_PATTERN = /^https:\/\/([a-z0-9-]+\.)?kktix\.com\//;
 const TIXCRAFT_PATTERN = /^https:\/\/([a-z0-9-]+\.)?tixcraft\.com\//;
 
 // ── 獨立視窗開啟 popup ───────────────────────────────────────
@@ -74,11 +74,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       chrome.tabs.sendMessage(
         tabId,
         {
-          action:     "START",
-          buyCount:   cfg.buyCount,
+          action: "START",
+          buyCount: cfg.buyCount,
           chooseArea: cfg.chooseArea,
           memberCode: cfg.memberCode,
-          question:   cfg.question,
+          question: cfg.question,
         },
         (response) => {
           if (chrome.runtime.lastError) {
@@ -115,20 +115,20 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       chrome.tabs.sendMessage(
         tabId,
         {
-          action:       "START",
-          buyCount:     cfg.buyCount,
-          chooseDate:   Array.isArray(cfg.chooseDate)
-                          ? cfg.chooseDate
-                          : (cfg.chooseDate ? cfg.chooseDate.split(",").map(s => s.trim()).filter(Boolean) : []),
-          chooseArea:   Array.isArray(cfg.chooseArea)
-                          ? cfg.chooseArea
-                          : (cfg.chooseArea ? cfg.chooseArea.split(",").map(s => s.trim()).filter(Boolean) : []),
-          ocrApiUrl:    cfg.ocrApiUrl,
+          action: "START",
+          buyCount: cfg.buyCount,
+          chooseDate: Array.isArray(cfg.chooseDate)
+            ? cfg.chooseDate
+            : (cfg.chooseDate ? cfg.chooseDate.split(",").map(s => s.trim()).filter(Boolean) : []),
+          chooseArea: Array.isArray(cfg.chooseArea)
+            ? cfg.chooseArea
+            : (cfg.chooseArea ? cfg.chooseArea.split(",").map(s => s.trim()).filter(Boolean) : []),
+          ocrApiUrl: cfg.ocrApiUrl,
           areaFallback: cfg.areaFallback ?? "refresh",
           dateFallback: cfg.dateFallback ?? "refresh",
-          reloadDelay:  cfg.reloadDelay ?? 1,
-          targetUrl:    cfg.targetUrl ?? "",
-          verifyCode:   cfg.verifyCode ?? "",
+          reloadDelay: cfg.reloadDelay ?? 1,
+          targetUrl: cfg.targetUrl ?? "",
+          verifyCode: cfg.verifyCode ?? "",
         },
         (response) => {
           if (chrome.runtime.lastError) {

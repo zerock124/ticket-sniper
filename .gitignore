@@ -1,2 +1,4 @@
 ocr/.venv
 .vscode/
+ocr/build
+ocr/dist
