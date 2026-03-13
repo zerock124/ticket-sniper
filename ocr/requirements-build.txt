@@ -1,4 +1,0 @@
-# 打包所需的額外依賴
-# 安裝方式：pip install -r requirements-build.txt
-
-pyinstaller>=5.0

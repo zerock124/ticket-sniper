@@ -1,100 +1,65 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller 配置檔案
-====================
-用於更細緻地控制打包過程
-
+PyInstaller 配置檔案（--onefile 模式）
+======================================
 使用方式：
   pyinstaller ocr_server.spec
 """
-
-import sys
 import os
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+from PyInstaller.utils.hooks import collect_all
 
-# 設定輸出目錄到 tickethelper/ocr_server
+# 輸出單一 exe 到 tickethelper 目錄
 SPEC_DIR = os.path.dirname(os.path.abspath(SPECPATH))
-DISTDIR = os.path.join(SPEC_DIR, "..", "tickethelper", "ocr_server")
-DISTDIR = os.path.abspath(DISTDIR)
+DISTDIR = os.path.abspath(os.path.join(SPEC_DIR, '..', 'tickethelper', 'ocr_server'))
 
-block_cipher = None
-
-# 收集 ddddocr 的所有數據（包括模型檔案）
-datas_ddddocr = []
-binaries_ddddocr = []
-hiddenimports_ddddocr = []
-
-tmp_ret = collect_all('ddddocr')
-datas_ddddocr += tmp_ret[0]
-binaries_ddddocr += tmp_ret[1]
-hiddenimports_ddddocr += tmp_ret[2]
-
-# 收集 onnxruntime 的所有數據
-datas_onnx = []
-binaries_onnx = []
-hiddenimports_onnx = []
-
-tmp_ret = collect_all('onnxruntime')
-datas_onnx += tmp_ret[0]
-binaries_onnx += tmp_ret[1]
-hiddenimports_onnx += tmp_ret[2]
-
-# 合併所有數據
-all_datas = datas_ddddocr + datas_onnx
-all_binaries = binaries_ddddocr + binaries_onnx
-all_hiddenimports = hiddenimports_ddddocr + hiddenimports_onnx + [
+datas = []
+binaries = []
+hiddenimports = [
     'flask',
     'flask_cors',
     'PIL',
     'PIL.Image',
-    'io',
-    'base64',
 ]
+
+tmp_ret = collect_all('ddddocr')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+tmp_ret = collect_all('onnxruntime')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['ocr_server.py'],
     pathex=[],
-    binaries=all_binaries,
-    datas=all_datas,
-    hiddenimports=all_hiddenimports,
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['rth_onnxruntime.py'],  # console 暫停機制
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='ocr_server',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  # 顯示控制台視窗
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # 顯示 console 視窗
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='ocr_server',
     distpath=DISTDIR,
 )
