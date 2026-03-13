@@ -103,17 +103,17 @@ if (window.__tixcraftLoaded) {
     const _alertListeners = new Set();
     const _confirmListeners = new Set();
     const originalAlert = window.alert;
-
     window.addEventListener("__tixcraft_alert", (e) => {
         const alertMessage = e.detail ?? "";
         if (alertMessage.length > 0) {
             sendLog(`⚠️ 攔截到 alert：${alertMessage}`, "warn");
             _alertListeners.forEach(fn => fn(alertMessage));
             _alertListeners.clear();
-            //originalAlert(alertMessage);
+            window.alert = originalAlert; // 恢復原生 alert，避免重複攔截造成無限迴圈
         }
     });
 
+    const originalConfirm = window.confirm;
     window.addEventListener("__tixcraft_confirm", (e) => {
         console.log(e);
         const confirmMessage = e.detail ?? "";
@@ -121,20 +121,9 @@ if (window.__tixcraftLoaded) {
             sendLog(`⚠️ 攔截到 confirm：${confirmMessage}`, "warn");
             _confirmListeners.forEach(fn => fn(confirmMessage));
             _confirmListeners.clear();
+            window.confirm = originalConfirm; // 恢復原生 confirm，避免重複攔截造成無限迴圈
         }
     });
-
-    // 等待 alert 事件（由 alert-override.js 橋接），或逾時後回傳 null
-    function waitForAlert(timeout = 5000) {
-        return new Promise((resolve) => {
-            const handler = (msg) => resolve(msg);
-            _alertListeners.add(handler);
-            setTimeout(() => {
-                _alertListeners.delete(handler);
-                resolve(null);
-            }, timeout);
-        });
-    }
 
     // 傳送紀錄訊息給 popup
     function sendLog(text, type = "info") {
