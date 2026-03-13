@@ -30,11 +30,11 @@ app = Flask(__name__)
 # 允許來自 Chrome Extension 及 Tixcraft 頁面的跨來源請求
 # content.js 在 tixcraft.com 頁面中執行，fetch 的 Origin 為 tixcraft.com，
 # 因此需同時允許 tixcraft.com 網域及所有來源（Chrome Extension 可能沒有 Origin header）
-CORS(app, 
-     resources={r"/*": {"origins": "*"}},
+# flask-cors 6.0.0 改版後 resources dict 寫法行為異動，改用扁平參數
+CORS(app,
+     origins="*",
      methods=["GET", "POST", "OPTIONS"],
-     allow_headers=["Content-Type"],
-     supports_credentials=False)
+     allow_headers=["Content-Type"])
 
 # 初始化 ddddocr（只初始化一次，節省效能）
 ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
