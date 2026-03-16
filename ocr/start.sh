@@ -11,6 +11,6 @@ fi
 
 echo "使用 Python 版本：$(python3.10 --version)"
 echo "檢查依賴套件..."
-python3.10 -m pip install flask flask-cors ddddocr --quiet
+python3.10 -m pip install -r requirements.txt --quiet
 echo "啟動 OCR Server..."
 python3.10 ocr_server.py

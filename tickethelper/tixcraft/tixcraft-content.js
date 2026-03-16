@@ -83,6 +83,7 @@ if (window.__tixcraftLoaded) {
         buy_count: 2,
         choose_date: [],
         choose_area: [],
+        exclude_area: [],
         area_fallback: "refresh",
         date_fallback: "refresh",
         reload_delay: 1,
@@ -321,7 +322,14 @@ if (window.__tixcraftLoaded) {
                 li?.classList.contains("disabled") ||
                 text.includes("已售完") ||
                 text.includes("Sold Out");
-            return !isSoldOut;
+            if (isSoldOut) return false;
+            // 排除包含排除關鍵字的區域
+            const isExcluded = CONFIG.exclude_area.some(kw => text.includes(kw));
+            if (isExcluded) {
+                sendLog(`略過排除區域：${text.trim().replace(/\s+/g, " ")}`, "warn");
+                return false;
+            }
+            return true;
         });
 
         if (availableLinks.length === 0) {
@@ -546,6 +554,9 @@ if (window.__tixcraftLoaded) {
             CONFIG.buy_count = msg.buyCount ?? 2;
             CONFIG.choose_date = msg.chooseDate ?? [];
             CONFIG.choose_area = msg.chooseArea ?? [];
+            CONFIG.exclude_area = msg.excludeArea
+                ? msg.excludeArea.split(",").map(s => s.trim()).filter(Boolean)
+                : [];
             CONFIG.area_fallback = msg.areaFallback ?? "refresh";
             CONFIG.date_fallback = msg.dateFallback ?? "refresh";
             CONFIG.reload_delay = msg.reloadDelay ?? 1;
@@ -630,6 +641,9 @@ if (window.__tixcraftLoaded) {
             CONFIG.choose_area = Array.isArray(cfg.chooseArea)
                 ? cfg.chooseArea
                 : (cfg.chooseArea ? cfg.chooseArea.split(",").map(s => s.trim()).filter(Boolean) : []);
+            CONFIG.exclude_area = cfg.excludeArea
+                ? cfg.excludeArea.split(",").map(s => s.trim()).filter(Boolean)
+                : [];
             CONFIG.area_fallback = cfg.areaFallback ?? "refresh";
             CONFIG.date_fallback = cfg.dateFallback ?? "refresh";
             CONFIG.reload_delay = cfg.reloadDelay ?? 1;

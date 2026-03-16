@@ -387,12 +387,14 @@ kktixStartBtn.addEventListener("click", async () => {
     const settings = kktixBuildSettings();
 
     if (!settings.buyCount || settings.buyCount < 1) {
-        kktixAddLog("❌ 購買數量必須大於 0", "error");
+        kktixAddLog("❌ 步驟 1：購買數量必須大於 0", "error");
+        showToast("請填寫步驟 1：購買數量", "error");
         return;
     }
 
     if (!settings.chooseArea || settings.chooseArea.length === 0) {
-        kktixAddLog("❌ 請至少輸入或勾選一個票種", "error");
+        kktixAddLog("❌ 步驟 2：請至少輸入或勾選一個票種", "error");
+        showToast("請完成步驟 2：選擇票種", "error");
         return;
     }
 
@@ -510,6 +512,7 @@ function kktixInit() {
 const tcBuyCountEl          = document.getElementById("tixcraft-buyCount");
 const tcChooseDateEl        = document.getElementById("tixcraft-chooseDate");
 const tcChooseAreaEl        = document.getElementById("tixcraft-chooseArea");
+const tcExcludeAreaEl       = document.getElementById("tixcraft-excludeArea");
 const tcOcrApiUrlSelectEl   = document.getElementById("tixcraft-ocrApiUrlSelect");
 const tcOcrApiUrlCustomEl   = document.getElementById("tixcraft-ocrApiUrlCustom");
 const tcAreaFallbackEl      = document.getElementById("tixcraft-areaFallback");
@@ -650,13 +653,15 @@ function tcLoadSettings() {
     chrome.storage.local.get(
         [
             "tixcraft_buyCount", "tixcraft_chooseDate", "tixcraft_chooseArea",
-            "tixcraft_ocrApiUrl", "tixcraft_areaFallback", "tixcraft_dateFallback",
-            "tixcraft_reloadDelay", "tixcraft_targetUrl", "tixcraft_verifyCode",
+            "tixcraft_excludeArea", "tixcraft_ocrApiUrl", "tixcraft_areaFallback",
+            "tixcraft_dateFallback", "tixcraft_reloadDelay", "tixcraft_targetUrl",
+            "tixcraft_verifyCode",
         ],
         (result) => {
             tcBuyCountEl.value    = result.tixcraft_buyCount ?? 2;
             tcChooseDateEl.value  = result.tixcraft_chooseDate ?? "";
             tcChooseAreaEl.value  = result.tixcraft_chooseArea ?? "";
+            tcExcludeAreaEl.value = result.tixcraft_excludeArea ?? "輪椅,身障,身心障礙,Restricted View,燈柱遮蔽,視線不完整";
             tcSetOcrApiUrl(result.tixcraft_ocrApiUrl ?? "http://localhost:5511/ocr");
             tcAreaFallbackEl.value  = result.tixcraft_areaFallback ?? "refresh";
             tcDateFallbackEl.value  = result.tixcraft_dateFallback ?? "refresh";
@@ -672,6 +677,7 @@ function tcBuildSettings() {
         buyCount:     parseInt(tcBuyCountEl.value, 10) || 2,
         chooseDate:   tcChooseDateEl.value.trim(),
         chooseArea:   tcChooseAreaEl.value.trim(),
+        excludeArea:  tcExcludeAreaEl.value.trim(),
         ocrApiUrl:    tcGetOcrApiUrl(),
         areaFallback: tcAreaFallbackEl.value,
         dateFallback: tcDateFallbackEl.value,
@@ -729,18 +735,21 @@ tcStartBtn.addEventListener("click", async () => {
     const isValid = await tcIsOcrVerificationValid();
     if (!isValid) {
         tcAddLog("❌ OCR Server 驗證已過期或未驗證，請先點擊 🔄 重新驗證", "error");
+        showToast("OCR 驗證已過期，請重新檢查", "error");
         return;
     }
 
     if (!tcOcrDot.className.includes("online")) {
-        tcAddLog("❌ 請先確保 OCR Server 已啟動並連線成功", "error");
+        tcAddLog("❌ OCR Server 未連線，請先啟動 ocr_server.py", "error");
+        showToast("OCR Server 未連線", "error");
         return;
     }
 
     const settings = tcBuildSettings();
 
     if (!settings.buyCount || settings.buyCount < 1) {
-        tcAddLog("❌ 購買數量必須大於 0", "error");
+        tcAddLog("❌ 步驟 1：購買數量必須大於 0", "error");
+        showToast("請填寫步驟 1：購買數量", "error");
         return;
     }
 
@@ -751,6 +760,7 @@ tcStartBtn.addEventListener("click", async () => {
         tixcraft_buyCount:    settings.buyCount,
         tixcraft_chooseDate:  settings.chooseDate,
         tixcraft_chooseArea:  settings.chooseArea,
+        tixcraft_excludeArea: settings.excludeArea,
         tixcraft_ocrApiUrl:   settings.ocrApiUrl,
         tixcraft_areaFallback: settings.areaFallback,
         tixcraft_dateFallback: settings.dateFallback,
@@ -762,6 +772,7 @@ tcStartBtn.addEventListener("click", async () => {
             buyCount:     settings.buyCount,
             chooseDate:   settings.chooseDate,
             chooseArea:   settings.chooseArea,
+            excludeArea:  settings.excludeArea,
             ocrApiUrl:    settings.ocrApiUrl,
             areaFallback: settings.areaFallback,
             dateFallback: settings.dateFallback,
@@ -789,11 +800,16 @@ tcStartBtn.addEventListener("click", async () => {
             : `重整（${settings.reloadDelay}秒）`;
         tcAddLog(`區域關鍵字：${chooseAreaArr.join(" / ")}（找不到時：${fallbackLabel}）`, "info");
     }
+    const excludeAreaArr = tcParseKeywords(settings.excludeArea);
+    if (excludeAreaArr.length > 0) {
+        tcAddLog(`排除關鍵字：${excludeAreaArr.join(" / ")}`, "info");
+    }
 
     await tcSendToContent("START", {
         buyCount:     settings.buyCount,
         chooseDate:   chooseDateArr,
         chooseArea:   chooseAreaArr,
+        excludeArea:  settings.excludeArea,
         ocrApiUrl:    settings.ocrApiUrl,
         areaFallback: settings.areaFallback,
         dateFallback: settings.dateFallback,
@@ -819,6 +835,7 @@ tcSaveBtn.addEventListener("click", () => {
             tixcraft_buyCount:    settings.buyCount,
             tixcraft_chooseDate:  settings.chooseDate,
             tixcraft_chooseArea:  settings.chooseArea,
+            tixcraft_excludeArea: settings.excludeArea,
             tixcraft_ocrApiUrl:   settings.ocrApiUrl,
             tixcraft_targetUrl:   settings.targetUrl,
             tixcraft_verifyCode:  settings.verifyCode,

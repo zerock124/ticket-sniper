@@ -368,12 +368,74 @@ input:disabled + .slider {
   flex-shrink: 0;
 }
 
+.section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #141420;
+  border-radius: 8px;
+  border: 1px solid #2e2e42;
+}
+
+.section-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #90caf9;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
 .label {
   font-size: 12px;
   font-weight: 600;
   color: #aaa;
   text-transform: uppercase;
   letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.label-required {
+  color: #c5cae9;
+}
+
+.step-number {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.required-mark {
+  color: #ef5350;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.3px;
+}
+
+.platform-badge.platform-kktix {
+  background: rgba(239, 83, 80, 0.15);
+  color: #ef5350;
+  border: 1px solid rgba(239, 83, 80, 0.3);
+}
+
+.platform-badge.platform-tixcraft {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
 .hint {
@@ -627,6 +689,59 @@ input:disabled + .slider {
 .manual-area .textarea {
   margin-top: 6px;
   font-size: 12px;
+}
+
+/* ── 進階設定摺疊區 ──────────────────────────────────────── */
+.advanced-section {
+  margin-top: 8px;
+  background: #141420;
+  border: 1px solid #2e2e42;
+  border-radius: 8px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.advanced-summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: #90caf9;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 12px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s, color 0.2s;
+  border-radius: 8px;
+}
+
+.advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-summary::before {
+  content: "▶";
+  font-size: 10px;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.advanced-section[open] .advanced-summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-summary:hover {
+  background: #1a1a26;
+  color: #aed6ff;
+}
+
+.advanced-content {
+  padding: 12px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ── 頁尾 ────────────────────────────────────────────────── */

@@ -22,6 +22,6 @@ if "%PY310%"=="" (
 echo 使用 Python 版本：
 "%PY310%" --version
 echo 檢查依賴套件...
-"%PY310%" -m pip install flask flask-cors ddddocr --quiet
+"%PY310%" -m pip install -r requirements.txt --quiet
 echo 啟動 OCR Server...
 "%PY310%" ocr_server.py
