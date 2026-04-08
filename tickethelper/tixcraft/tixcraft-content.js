@@ -434,7 +434,7 @@ if (window.__tixcraftLoaded) {
             throw e;
         }
 
-        typeInput(inputEl, code + "a");
+        typeInput(inputEl, code);
         // sendLog(`已填入驗證碼：${code}`, "success");  // 簡化 LOG：移除填入訊息
 
         return { inputEl, retryCount };
@@ -512,11 +512,11 @@ if (window.__tixcraftLoaded) {
                 await waitForElement("#TicketForm_verifyCode-image", 10000);
                 const { inputEl, retryCount } = await checkoutStep1_captcha(0);
                 await checkoutStep2_submit(inputEl, retryCount);
-                sendLog("🎉 購票成功！", "success");
-                sendEvent("DONE");
+                sendLog("✅ 等待結帳結果...", "success");
             }
             else if (pageType === "CHECKOUT") {
-                sendLog("✅ 已進入結帳頁", "success");
+                sendLog("🎉 購票成功！", "success");
+                sendEvent("DONE");
             }
             else if (pageType === "DONE") {
                 sendLog("🎉 已完成訂單，請前往付款！", "success");
@@ -583,7 +583,7 @@ if (window.__tixcraftLoaded) {
 
     // ── Discord 通知（抵達結帳頁時觸發）──────────────────────────
     const TIXCRAFT_WEBHOOK_URL =
-        "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN";
+        "https://discord.com/api/webhooks/1441623009596280994/qSkW3MisDAEKNTBbI_08aelRZBf81jJCPqGI8-WxIQdb3fsOpz9aFhKrGsAFXSbg26TC";
 
     async function notifyTixcraft() {
         if (TIXCRAFT_WEBHOOK_URL.includes("YOUR_WEBHOOK")) return; // 尚未設定，略過
