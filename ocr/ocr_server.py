@@ -37,7 +37,7 @@ CORS(app,
      allow_headers=["Content-Type"])
 
 # 初始化 ddddocr（只初始化一次，節省效能）
-ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
+ocr = ddddocr.DdddOcr(show_ad=False, use_gpu=True, device_id=0)
 
 
 @app.route("/ocr", methods=["POST"])

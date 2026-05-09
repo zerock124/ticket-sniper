@@ -345,7 +345,7 @@ function kktixRenderTicketList(tickets) {
 async function kktixGetActiveTabId() {
     return new Promise((resolve) => {
         // 查詢所有視窗中符合 kktix.com 的分頁
-        chrome.tabs.query({ url: ["https://kktix.com/*", "https://*.kktix.com/*"] }, (tabs) => {
+        chrome.tabs.query({ url: ["https://kktix.com/*", "https://*.kktix.com/*", "https://*.kktix.cc/*"] }, (tabs) => {
             if (tabs && tabs.length > 0) {
                 const activeTab = tabs.find(t => t.active) ?? tabs[tabs.length - 1];
                 resolve(activeTab.id);

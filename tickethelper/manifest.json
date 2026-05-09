@@ -29,6 +29,7 @@
       ],
       "js": ["tixcraft/tixcraft-alert-override.js"],
       "run_at": "document_start",
+      "world": "MAIN",
       "all_frames": true
     },
     {
