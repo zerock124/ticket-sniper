@@ -258,12 +258,18 @@ async function kktixFetchTickets() {
     }
 
     try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix-content.js"] });
-    } catch (_) { }
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix/kktix-content.js"] });
+    } catch (err) {
+        kktixAddLog(`⚠️ 注入腳本失敗：${err.message}`, "warn");
+    }
+
+    // 等待 content script 初始化
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     chrome.tabs.sendMessage(tabId, { action: "GET_TICKETS" }, (response) => {
         if (chrome.runtime.lastError) {
             kktixAddLog(`⚠️ 抓取票種失敗：${chrome.runtime.lastError.message}`, "warn");
+            kktixAddLog("請確認已在 KKTIX 票券選擇頁面，並重新整理頁面後再試", "info");
             return;
         }
         if (response?.error) {
@@ -364,8 +370,10 @@ async function kktixSendToContent(action, data = {}) {
     }
 
     try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix-content.js"] });
-    } catch (_) { }
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix/kktix-content.js"] });
+    } catch (err) {
+        kktixAddLog(`⚠️ 注入腳本失敗：${err.message}`, "warn");
+    }
 
     // 等待注入腳本初始化
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -373,6 +381,7 @@ async function kktixSendToContent(action, data = {}) {
     chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
         if (chrome.runtime.lastError) {
             kktixAddLog(`⚠️ 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
+            kktixAddLog("請確認已在 KKTIX 頁面，並重新整理後再試", "info");
             return;
         }
         if (response?.log) {
@@ -711,8 +720,10 @@ async function tcSendToContent(action, data = {}) {
     }
 
     try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["tixcraft-content.js"] });
-    } catch (_) { }
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["tixcraft/tixcraft-content.js"] });
+    } catch (err) {
+        tcAddLog(`⚠️ 注入腳本失敗：${err.message}`, "warn");
+    }
 
     // 等待注入腳本初始化
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -720,6 +731,7 @@ async function tcSendToContent(action, data = {}) {
     chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
         if (chrome.runtime.lastError) {
             tcAddLog(`⚠️ 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
+            tcAddLog("請確認已在 Tixcraft 頁面，並重新整理後再試", "info");
             return;
         }
         if (response?.log) {
