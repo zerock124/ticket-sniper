@@ -303,7 +303,7 @@ OCR Server 是一個本機服務，負責辨識 Tixcraft 的圖形驗證碼。
 
 ### 選項 B：使用 Python 原始碼
 
-需安裝 Python 3.8+：
+需安裝 Python 3.12+：
 
 ```bash
 cd ocr
