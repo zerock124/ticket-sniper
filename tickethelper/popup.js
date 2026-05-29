@@ -982,3 +982,403 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ── 啟動初始化 ────────────────────────────────────────────────────
 kktixInit();
 tcInit();
+
+// ════════════════════════════════════════════════════════════════
+//  Inline 邏輯（自動填到最後確認訂位前，不自動送出）
+// ════════════════════════════════════════════════════════════════
+
+document.querySelectorAll("#panel-inline .tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const tabId = btn.dataset.tab;
+        document.querySelectorAll("#panel-inline .tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll("#panel-inline .tab-panel").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(tabId).classList.add("active");
+    });
+});
+
+const inTargetUrlEl      = document.getElementById("inline-targetUrl");
+const inAdultCountEl     = document.getElementById("inline-adultCount");
+const inKidCountEl       = document.getElementById("inline-kidCount");
+const inPriorityPlanEl   = document.getElementById("inline-priorityPlan");
+const inExactDateEl      = document.getElementById("inline-exactDate");
+const inExactTimeEl      = document.getElementById("inline-exactTime");
+const inAddExactBtn      = document.getElementById("inline-addExactBtn");
+const inExactListEl      = document.getElementById("inline-exactList");
+const inRangeDateEl      = document.getElementById("inline-rangeDate");
+const inRangeStartEl     = document.getElementById("inline-rangeStart");
+const inRangeEndEl       = document.getElementById("inline-rangeEnd");
+const inAddRangeBtn      = document.getElementById("inline-addRangeBtn");
+const inRangeListEl      = document.getElementById("inline-rangeList");
+const inAnyDateEl        = document.getElementById("inline-anyDate");
+const inAddAnyBtn        = document.getElementById("inline-addAnyBtn");
+const inAnyListEl        = document.getElementById("inline-anyList");
+const inReloadOnNoTimeEl = document.getElementById("inline-reloadOnNoTime");
+const inReloadDelayEl    = document.getElementById("inline-reloadDelay");
+const inNameEl           = document.getElementById("inline-name");
+const inGenderEl         = document.getElementById("inline-gender");
+const inPhoneEl          = document.getElementById("inline-phone");
+const inEmailEl          = document.getElementById("inline-email");
+const inPurposeEl        = document.getElementById("inline-purpose");
+const inNoteEl           = document.getElementById("inline-note");
+const inAutoAgreeEl      = document.getElementById("inline-autoAgree");
+const inStartBtn         = document.getElementById("inline-startBtn");
+const inStopBtn          = document.getElementById("inline-stopBtn");
+const inSaveBtn          = document.getElementById("inline-saveBtn");
+const inSaveContactBtn   = document.getElementById("inline-saveContactBtn");
+const inClearLogBtn      = document.getElementById("inline-clearLogBtn");
+const inLogArea          = document.getElementById("inline-logArea");
+const inStatusDot        = document.getElementById("inline-statusDot");
+const inStatusText       = document.getElementById("inline-statusText");
+
+const INLINE_MAX_LOG_ENTRIES = 300;
+
+let inPriorityPlanState = { exact: [], range: [], any: [] };
+
+function inPopulateTimeSelects() {
+    const targets = [inExactTimeEl, inRangeStartEl, inRangeEndEl].filter(Boolean);
+    targets.forEach(select => {
+        const current = select.value;
+        select.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "請選擇時間";
+        select.appendChild(placeholder);
+        for (let h = 0; h < 24; h++) {
+            for (let m = 0; m < 60; m += 10) {
+                const value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+                const opt = document.createElement("option");
+                opt.value = value;
+                opt.textContent = value;
+                select.appendChild(opt);
+            }
+        }
+        if (current) select.value = current;
+    });
+}
+
+function inDateLabel(isoDate) {
+    if (!isoDate) return "";
+    const [y, m, d] = isoDate.split("-").map(Number);
+    if (!y || !m || !d) return isoDate;
+    const w = "日一二三四五六"[new Date(y, m - 1, d).getDay()];
+    return `${m}月${d}日週${w}`;
+}
+
+function inNormalizeTime(t) {
+    if (!t) return "";
+    const [h, m] = String(t).split(":");
+    return `${String(Number(h)).padStart(2, "0")}:${String(Number(m || 0)).padStart(2, "0")}`;
+}
+
+function inSyncPriorityPlanInput() {
+    if (inPriorityPlanEl) inPriorityPlanEl.value = JSON.stringify(inPriorityPlanState);
+}
+
+function inRenderPriorityPlan() {
+    const render = (root, rows, formatter, bucket) => {
+        if (!root) return;
+        root.innerHTML = "";
+        if (!rows.length) {
+            const empty = document.createElement("div");
+            empty.className = "log-entry info";
+            empty.textContent = "尚未設定";
+            root.appendChild(empty);
+            return;
+        }
+        rows.forEach((row, idx) => {
+            const div = document.createElement("div");
+            div.className = "inline-priority-row";
+            const span = document.createElement("span");
+            span.textContent = `${idx + 1}. ${formatter(row)}`;
+            const del = document.createElement("button");
+            del.type = "button";
+            del.textContent = "刪除";
+            del.addEventListener("click", () => {
+                inPriorityPlanState[bucket].splice(idx, 1);
+                inSyncPriorityPlanInput();
+                inRenderPriorityPlan();
+            });
+            div.appendChild(span);
+            div.appendChild(del);
+            root.appendChild(div);
+        });
+    };
+    render(inExactListEl, inPriorityPlanState.exact, r => `${r.dateText} ${r.time}`, "exact");
+    render(inRangeListEl, inPriorityPlanState.range, r => `${r.dateText} ${r.start}-${r.end}`, "range");
+    render(inAnyListEl, inPriorityPlanState.any, r => `${r.dateText} 全部可訂時間`, "any");
+    inSyncPriorityPlanInput();
+}
+
+function inLoadPriorityPlan(raw) {
+    try {
+        const parsed = typeof raw === "string" && raw.trim() ? JSON.parse(raw) : raw;
+        inPriorityPlanState = {
+            exact: Array.isArray(parsed?.exact) ? parsed.exact : [],
+            range: Array.isArray(parsed?.range) ? parsed.range : [],
+            any: Array.isArray(parsed?.any) ? parsed.any : [],
+        };
+    } catch (_) {
+        inPriorityPlanState = { exact: [], range: [], any: [] };
+    }
+    inRenderPriorityPlan();
+}
+
+function inPriorityPlanHasRows(plan = inPriorityPlanState) {
+    return !!(plan?.exact?.length || plan?.range?.length || plan?.any?.length);
+}
+
+
+function inRenderLogEntry(time, message, type) {
+    const entry = document.createElement("div");
+    entry.className = `log-entry ${type}`;
+    entry.textContent = `[${time}] ${message}`;
+    inLogArea.appendChild(entry);
+    inLogArea.scrollTop = inLogArea.scrollHeight;
+}
+
+function inAddLog(message, type = "info") {
+    const now = new Date().toLocaleTimeString("zh-TW");
+    inRenderLogEntry(now, message, type);
+    chrome.storage.local.get(["inline_savedLogs"], (result) => {
+        const logs = result.inline_savedLogs ?? [];
+        logs.push({ time: now, message, type });
+        if (logs.length > INLINE_MAX_LOG_ENTRIES) logs.splice(0, logs.length - INLINE_MAX_LOG_ENTRIES);
+        chrome.storage.local.set({ inline_savedLogs: logs });
+    });
+}
+
+function inSetStatus(state, text) {
+    inStatusDot.className = `status-dot ${state}`;
+    inStatusText.textContent = text;
+}
+
+function inParseKeywords(raw) {
+    return String(raw || "").split(",").map(s => s.trim()).filter(Boolean);
+}
+
+function inBuildSettings() {
+    return {
+        targetUrl:      inTargetUrlEl.value.trim(),
+        adultCount:     parseInt(inAdultCountEl.value, 10) || 1,
+        kidCount:       inKidCountEl.value.trim(),
+        priorityPlan:   JSON.parse(JSON.stringify(inPriorityPlanState)),
+        reloadOnNoTime: inReloadOnNoTimeEl.value === "true",
+        reloadDelay:    parseFloat(inReloadDelayEl.value) || 2,
+        name:           inNameEl.value.trim(),
+        gender:         inGenderEl.value,
+        phone:          inPhoneEl.value.trim(),
+        email:          inEmailEl.value.trim(),
+        purpose:        inPurposeEl.value.trim(),
+        purposes:       inParseKeywords(inPurposeEl.value),
+        note:           inNoteEl.value.trim(),
+        autoAgree:      inAutoAgreeEl.value === "true",
+    };
+}
+
+function inLoadSettings() {
+    chrome.storage.local.get([
+        "inline_targetUrl", "inline_adultCount", "inline_kidCount", "inline_priorityPlan",
+"inline_reloadOnNoTime", "inline_reloadDelay", "inline_name", "inline_gender", "inline_phone",
+        "inline_email", "inline_purpose", "inline_note", "inline_autoAgree", "inline_isRunning", "inline_savedLogs"
+    ], (r) => {
+        inTargetUrlEl.value      = r.inline_targetUrl ?? "";
+        inAdultCountEl.value     = r.inline_adultCount ?? 3;
+        inKidCountEl.value       = r.inline_kidCount ?? "";
+        inLoadPriorityPlan(r.inline_priorityPlan ?? "");
+        inReloadOnNoTimeEl.value = String(r.inline_reloadOnNoTime ?? false);
+        inReloadDelayEl.value    = r.inline_reloadDelay ?? 2;
+        inNameEl.value           = r.inline_name ?? "";
+        inGenderEl.value         = r.inline_gender ?? "小姐";
+        inPhoneEl.value          = r.inline_phone ?? "";
+        inEmailEl.value          = r.inline_email ?? "";
+        inPurposeEl.value        = r.inline_purpose ?? "";
+        inNoteEl.value           = r.inline_note ?? "";
+        inAutoAgreeEl.value      = String(r.inline_autoAgree ?? true);
+
+        (r.inline_savedLogs ?? []).forEach(({ time, message, type }) => inRenderLogEntry(time, message, type));
+        if (r.inline_isRunning) {
+            inSetStatus("running", "Inline 流程執行中...");
+            inStartBtn.disabled = true;
+            inStopBtn.disabled = false;
+            inAddLog("偵測到 Inline 流程仍在執行中", "warn");
+        } else {
+            inAddLog("Inline 助手已載入，已移除候補邏輯", "info");
+        }
+    });
+}
+
+async function inGetActiveTabId(targetUrl = "") {
+    return new Promise(resolve => {
+        chrome.tabs.query({ url: ["https://inline.app/*", "https://*.inline.app/*"] }, (tabs) => {
+            if (tabs && tabs.length > 0) {
+                const activeTab = tabs.find(t => t.active) ?? tabs[tabs.length - 1];
+                resolve(activeTab.id);
+                return;
+            }
+            resolve(null);
+        });
+    });
+}
+
+async function inSendToContent(action, data = {}) {
+    let tabId = await inGetActiveTabId(data.targetUrl);
+
+    if (!tabId && data.targetUrl) {
+        const tab = await chrome.tabs.create({ url: data.targetUrl, active: true });
+        tabId = tab.id;
+        await new Promise(resolve => setTimeout(resolve, 1200));
+    }
+
+    if (!tabId) {
+        inAddLog("❌ 找不到 Inline 分頁，請先開啟 inline.app 訂位頁", "error");
+        return;
+    }
+
+    try {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["inline/inline-content.js"] });
+    } catch (err) {
+        inAddLog(`⚠️ 注入 Inline 腳本失敗：${err.message}`, "warn");
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
+        if (chrome.runtime.lastError) {
+            inAddLog(`⚠️ Inline 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
+            inAddLog("請確認已在 Inline 訂位頁，並重新整理後再試", "info");
+            return;
+        }
+        if (response?.log) inAddLog(response.log, response.type ?? "info");
+    });
+}
+
+function inSaveSettings(show = true) {
+    const s = inBuildSettings();
+    chrome.storage.local.set({
+        inline_targetUrl: s.targetUrl,
+        inline_adultCount: s.adultCount,
+        inline_kidCount: s.kidCount,
+        inline_priorityPlan: JSON.stringify(s.priorityPlan),
+        inline_reloadOnNoTime: s.reloadOnNoTime,
+        inline_reloadDelay: s.reloadDelay,
+        inline_name: s.name,
+        inline_gender: s.gender,
+        inline_phone: s.phone,
+        inline_email: s.email,
+        inline_purpose: s.purpose,
+        inline_note: s.note,
+        inline_autoAgree: s.autoAgree,
+    }, () => {
+        if (show) {
+            showToast("Inline 設定已儲存", "success");
+            inAddLog("✅ Inline 設定已儲存", "success");
+        }
+    });
+}
+
+
+inAddExactBtn?.addEventListener("click", () => {
+    const date = inExactDateEl.value;
+    const time = inNormalizeTime(inExactTimeEl.value);
+    if (!date || !time) { inAddLog("❌ 第一順位請選日期與時間", "error"); return; }
+    inPriorityPlanState.exact.push({ date, dateText: inDateLabel(date), time });
+    inRenderPriorityPlan();
+});
+
+inAddRangeBtn?.addEventListener("click", () => {
+    const date = inRangeDateEl.value;
+    const start = inNormalizeTime(inRangeStartEl.value);
+    const end = inNormalizeTime(inRangeEndEl.value);
+    if (!date || !start || !end) { inAddLog("❌ 第二順位請選日期、開始時間與結束時間", "error"); return; }
+    if (start > end) { inAddLog("❌ 第二順位開始時間不可晚於結束時間", "error"); return; }
+    inPriorityPlanState.range.push({ date, dateText: inDateLabel(date), start, end });
+    inRenderPriorityPlan();
+});
+
+inAddAnyBtn?.addEventListener("click", () => {
+    const date = inAnyDateEl.value;
+    if (!date) { inAddLog("❌ 第三順位請選日期", "error"); return; }
+    inPriorityPlanState.any.push({ date, dateText: inDateLabel(date) });
+    inRenderPriorityPlan();
+});
+
+inSaveBtn.addEventListener("click", () => inSaveSettings(true));
+inSaveContactBtn.addEventListener("click", () => inSaveSettings(true));
+
+inStartBtn.addEventListener("click", async () => {
+    const s = inBuildSettings();
+    if (!s.targetUrl && !(await inGetActiveTabId())) {
+        inAddLog("❌ 請填 Inline 訂位網址，或先開啟 Inline 分頁", "error");
+        showToast("請填 Inline 訂位網址", "error");
+        return;
+    }
+    if (!s.adultCount || s.adultCount < 1) {
+        inAddLog("❌ 大人人數必須大於 0", "error");
+        return;
+    }
+    if (!inPriorityPlanHasRows(s.priorityPlan)) {
+        inAddLog("❌ 請至少設定一筆三段式順位", "error");
+        return;
+    }
+    if (!s.name || !s.phone) {
+        inAddLog("❌ 請填訂位人姓名與手機號碼", "error");
+        showToast("請填姓名與手機", "error");
+        return;
+    }
+
+    inSaveSettings(false);
+    chrome.storage.local.set({
+        inline_isRunning: true,
+        inline_runningConfig: s,
+    });
+
+    inSetStatus("running", "Inline 流程執行中...");
+    inStartBtn.disabled = true;
+    inStopBtn.disabled = false;
+    inAddLog("🚀 開始 Inline 自動前置流程", "info");
+    inAddLog("安全限制：最後『確認訂位』仍需手動確認", "warn");
+
+    await inSendToContent("START", s);
+});
+
+inStopBtn.addEventListener("click", async () => {
+    chrome.storage.local.set({ inline_isRunning: false });
+    inSetStatus("idle", "已停止");
+    inStartBtn.disabled = false;
+    inStopBtn.disabled = true;
+    inAddLog("⏹ 使用者手動停止 Inline", "warn");
+    await inSendToContent("STOP");
+});
+
+inClearLogBtn.addEventListener("click", () => {
+    inLogArea.innerHTML = "";
+    chrome.storage.local.remove("inline_savedLogs");
+});
+
+chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.from !== "inline-content") return;
+    switch (msg.event) {
+        case "LOG":
+            inAddLog(msg.text, msg.type ?? "info");
+            break;
+        case "DONE":
+            chrome.storage.local.set({ inline_isRunning: false });
+            inSetStatus("idle", "已停在最後確認前");
+            inStartBtn.disabled = false;
+            inStopBtn.disabled = true;
+            inAddLog(msg.text || "已停在最後確認訂位前", "success");
+            showToast("Inline 已填妥，請手動確認", "success", 4000);
+            break;
+        case "RELOAD":
+            inAddLog("🔄 Inline 頁面重新整理中...", "warn");
+            break;
+        case "ERROR":
+            inSetStatus("error", "Inline 發生錯誤");
+            inAddLog(`❌ ${msg.text}`, "error");
+            break;
+    }
+});
+
+inPopulateTimeSelects();
+inLoadSettings();

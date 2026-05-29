@@ -10,6 +10,7 @@
 // 網址匹配規則
 const KKTIX_PATTERN = /^https:\/\/([a-z0-9-]+\.)?kktix\.com\//;
 const TIXCRAFT_PATTERN = /^https:\/\/([a-z0-9-]+\.)?tixcraft\.com\//;
+const INLINE_PATTERN = /^https:\/\/([a-z0-9-]+\.)?inline\.app\//;
 
 // ── 獨立視窗開啟 popup ───────────────────────────────────────
 // 點擊擴充功能圖示時，以獨立視窗開啟 popup.html，
@@ -140,6 +141,35 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       );
     });
   }
+
+  // ── Inline：頁面載入完成後重注入，恢復到最後確認前 ─────────────
+  if (INLINE_PATTERN.test(pageUrl) && changeInfo.status === "complete") {
+    chrome.storage.local.get(["inline_isRunning", "inline_runningConfig"], async (result) => {
+      if (!result.inline_isRunning || !result.inline_runningConfig) return;
+
+      console.log("[搶票助手] 偵測到 Inline 頁面重載，自動重新注入腳本...");
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["inline/inline-content.js"],
+        });
+      } catch (err) {
+        console.warn("[搶票助手] Inline 腳本注入失敗：", err.message);
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+      chrome.tabs.sendMessage(tabId, { action: "START", ...result.inline_runningConfig }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("[搶票助手] Inline START 失敗：", chrome.runtime.lastError.message);
+          return;
+        }
+        console.log("[搶票助手] Inline 已恢復流程", response);
+      });
+    });
+  }
+
 });
 
 // ── OCR API 代理（Tixcraft 專用）──────────────────────────────

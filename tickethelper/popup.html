@@ -41,6 +41,9 @@
             <button class="platform-btn" data-platform="tixcraft">
                 🟢 Tixcraft
             </button>
+            <button class="platform-btn" data-platform="inline">
+                🟠 Inline
+            </button>
         </div>
 
         <!-- ═══════════════════════════════════════════ -->
@@ -245,7 +248,6 @@
                                 <span class="hint">（本機驗證碼辨識服務）</span>
                             </label>
                             <select id="tixcraft-ocrApiUrlSelect" class="input">
-                                <option value="http://1.34.200.57:5511/ocr">遠端伺服器（1.34.200.57）</option>
                                 <option value="http://localhost:5511/ocr" selected>本機（localhost）</option>
                                 <option value="__custom__">自行輸入</option>
                             </select>
@@ -325,9 +327,150 @@
 
         </div><!-- /panel-tixcraft -->
 
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!--  Inline 面板                                -->
+        <!-- ═══════════════════════════════════════════ -->
+        <div id="panel-inline" class="platform-panel">
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="inline-tab-basic">📝 基礎設定</button>
+                <button class="tab-btn" data-tab="inline-tab-contact">👤 聯絡資訊</button>
+                <button class="tab-btn" data-tab="inline-tab-run">▶️ 執行控制</button>
+            </div>
+
+            <div id="inline-tab-basic" class="tab-panel active">
+                <div class="section">
+                    <label class="label label-required" for="inline-targetUrl">Inline 訂位網址 <span class="required-mark">*</span></label>
+                    <input type="text" id="inline-targetUrl" class="input" placeholder="https://inline.app/booking/..." />
+                </div>
+                <div class="section">
+                    <label class="label label-required" for="inline-adultCount">大人人數 <span class="required-mark">*</span></label>
+                    <input type="number" id="inline-adultCount" class="input" min="1" max="20" value="3" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-kidCount">小孩人數（空白代表不動）</label>
+                    <input type="number" id="inline-kidCount" class="input" min="0" max="20" placeholder="不動" />
+                </div>
+                <div class="section">
+                    <label class="label label-required">訂位順位設定 <span class="required-mark">*</span></label>
+                    <div class="hint">用選的建立順位，不必手打。日期用西元日期選擇器，程式會自動轉成 inline 可辨識的月/日。</div>
+                    <input type="hidden" id="inline-priorityPlan" />
+
+                    <details class="advanced-section" open>
+                        <summary class="advanced-summary">第一順位：指定日期 + 指定時間</summary>
+                        <div class="advanced-content">
+                            <div class="form-grid-3">
+                                <input type="date" id="inline-exactDate" class="input" />
+                                <select id="inline-exactTime" class="input"></select>
+                                <button type="button" id="inline-addExactBtn" class="btn btn-save">加入第一順位</button>
+                            </div>
+                            <div id="inline-exactList" class="log-area" style="max-height:120px;"></div>
+                        </div>
+                    </details>
+
+                    <details class="advanced-section" open>
+                        <summary class="advanced-summary">第二順位：指定日期 + 時間範圍</summary>
+                        <div class="advanced-content">
+                            <div class="form-grid-4">
+                                <input type="date" id="inline-rangeDate" class="input" />
+                                <select id="inline-rangeStart" class="input"></select>
+                                <select id="inline-rangeEnd" class="input"></select>
+                                <button type="button" id="inline-addRangeBtn" class="btn btn-save">加入第二順位</button>
+                            </div>
+                            <div id="inline-rangeList" class="log-area" style="max-height:120px;"></div>
+                        </div>
+                    </details>
+
+                    <details class="advanced-section" open>
+                        <summary class="advanced-summary">第三順位：指定日期 + 所有可訂時間</summary>
+                        <div class="advanced-content">
+                            <div class="form-grid-3">
+                                <input type="date" id="inline-anyDate" class="input" />
+                                <button type="button" id="inline-addAnyBtn" class="btn btn-save">加入第三順位</button>
+                            </div>
+                            <div id="inline-anyList" class="log-area" style="max-height:120px;"></div>
+                        </div>
+                    </details>
+                </div>
+                <details class="advanced-section">
+                    <summary class="advanced-summary">⚙️ 進階設定</summary>
+                    <div class="advanced-content">
+                        <div class="section">
+                            <label class="label" for="inline-reloadOnNoTime">全部找不到時</label>
+                            <select id="inline-reloadOnNoTime" class="input">
+                                <option value="false">只等待，不重整</option>
+                                <option value="true">重新整理頁面</option>
+                            </select>
+                        </div>
+                        <div class="section">
+                            <label class="label" for="inline-reloadDelay">重整延遲（秒）</label>
+                            <input type="number" id="inline-reloadDelay" class="input" min="0.1" max="60" step="0.1" value="2" />
+                        </div>
+                    </div>
+                </details>
+                <button id="inline-saveBtn" class="btn btn-save">💾 儲存設定</button>
+            </div>
+
+            <div id="inline-tab-contact" class="tab-panel">
+                <div class="section">
+                    <label class="label label-required" for="inline-name">訂位人姓名 <span class="required-mark">*</span></label>
+                    <input type="text" id="inline-name" class="input" placeholder="例如：王小明" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-gender">稱謂</label>
+                    <select id="inline-gender" class="input">
+                        <option value="小姐">小姐</option>
+                        <option value="先生">先生</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+                <div class="section">
+                    <label class="label label-required" for="inline-phone">手機號碼 <span class="required-mark">*</span></label>
+                    <input type="tel" id="inline-phone" class="input" placeholder="例如：0912345678" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-email">Email</label>
+                    <input type="email" id="inline-email" class="input" placeholder="可留空" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-purpose">用餐目的</label>
+                    <input type="text" id="inline-purpose" class="input" placeholder="例如：家庭用餐, 朋友聚餐" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-note">備註</label>
+                    <textarea id="inline-note" class="textarea" rows="2" placeholder="可留空"></textarea>
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-autoAgree">服務條款</label>
+                    <select id="inline-autoAgree" class="input">
+                        <option value="true">自動勾選同意條款</option>
+                        <option value="false">不勾選</option>
+                    </select>
+                </div>
+                <button id="inline-saveContactBtn" class="btn btn-save">💾 儲存聯絡資訊</button>
+            </div>
+
+            <div id="inline-tab-run" class="tab-panel tab-run-layout">
+                <div class="status-bar" id="inline-statusBar">
+                    <span class="status-dot idle" id="inline-statusDot"></span>
+                    <span id="inline-statusText">待機中</span>
+                </div>
+                <div class="button-group">
+                    <button id="inline-startBtn" class="btn btn-start">▶ 開始 Inline 流程</button>
+                    <button id="inline-stopBtn" class="btn btn-stop" disabled>⏹ 停止</button>
+                </div>
+                <div class="log-header">
+                    <label class="label">執行紀錄</label>
+                    <button id="inline-clearLogBtn" class="btn btn-clear-log" title="清除日誌">🗑 清除</button>
+                </div>
+                <div id="inline-logArea" class="log-area"></div>
+            </div>
+        </div><!-- /panel-inline -->
+
         <!-- 頁尾 -->
         <div class="footer">
-            <span>🔴 kktix.com &nbsp;|&nbsp; 🟢 tixcraft.com</span>
+            <span>🔴 kktix.com &nbsp;|&nbsp; 🟢 tixcraft.com &nbsp;|&nbsp; 🟠 inline.app</span>
         </div>
 
     </div><!-- /container -->

@@ -59,7 +59,9 @@
 
   /* popup 尺寸 */
   --popup-min-w: 340px;
+  --popup-max-w: 340px;
 }
+
 
 /* ── 全域重置 ─────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -849,4 +851,14 @@ select.input {
   .global-toggle-section { padding: 5px var(--sp-2); }
   .platform-nav { padding: 2px; }
   .tab-btn { padding: 4px 8px; }
+}
+.form-grid-3 { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, 1fr) auto; gap: 8px; align-items: center; }
+.form-grid-4 { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) auto; gap: 8px; align-items: center; }
+.inline-priority-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.inline-priority-row button { padding: 2px 8px; border-radius: 6px; cursor: pointer; }
+
+@media (max-width: 760px) {
+  :root { --popup-min-w: 360px; }
+  body { width: 100vw; min-height: 640px; }
+  .form-grid-3, .form-grid-4 { grid-template-columns: 1fr; }
 }
