@@ -2,19 +2,19 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
-REM 搜尋 Python 3.10
-set PY310=
+REM 搜尋 Python 3.13
+set PY313=
 for %%p in (
-    "%LocalAppData%\Programs\Python\Python310\python.exe"
-    "C:\Python310\python.exe"
-    "C:\Program Files\Python310\python.exe"
+    "%LocalAppData%\Programs\Python\Python313\python.exe"
+    "C:\Python313\python.exe"
+    "C:\Program Files\Python313\python.exe"
 ) do (
-    if exist %%p set PY310=%%~p
+    if exist %%p set PY313=%%~p
 )
 
-if "%PY310%"=="" (
-    echo 錯誤：找不到 Python 3.10
-    echo 請先安裝 Python 3.10：https://www.python.org/downloads/release/python-31011/
+if "%PY313%"=="" (
+    echo 錯誤：找不到 Python 3.13
+    echo 請先安裝 Python 3.13：https://www.python.org/downloads/release/python-31311/
     pause
     exit /b 1
 )

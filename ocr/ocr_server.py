@@ -16,7 +16,7 @@ import io
 
 # ── Pillow 10.0 相容性補丁 ──────────────────────────────────
 # Pillow >= 10.0.0 移除了 Image.ANTIALIAS，改為 Image.LANCZOS
-# ddddocr 1.5.x 內部仍使用舊屬性，此補丁在 ddddocr 載入前先行修補
+# ddddocr 1.6.1
 import PIL.Image
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
