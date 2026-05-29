@@ -8,7 +8,7 @@
     "activeTab",
     "scripting",
     "tabs",
-    "windows"
+    "sidePanel"
   ],
   "host_permissions": [
     "https://kktix.com/*",
@@ -22,6 +22,9 @@
   ],
   "action": {
     "default_title": "搶票助手 Pro"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "content_scripts": [
     {

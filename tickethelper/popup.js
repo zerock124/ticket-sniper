@@ -498,18 +498,24 @@ document.getElementById("kktix-fetchTicketsBtn").addEventListener("click", () =>
 function kktixInit() {
     kktixLoadSettings();
 
-    chrome.storage.local.get(["kktix_isRunning"], (result) => {
+    chrome.storage.local.get(["kktix_isRunning", "globalEnabled"], (result) => {
+        const globalEnabled = result.globalEnabled !== false; // 預設為 true
+        
         if (result.kktix_isRunning) {
             kktixSetStatus("running", "搶票執行中...");
             kktixStartBtn.disabled = true;
             kktixStopBtn.disabled  = false;
             kktixAddLog("偵測到 KKTIX 搶票流程仍在執行中", "warn");
-        } else {
+        } else if (globalEnabled) {
             kktixAddLog("KKTIX 助手已載入，請抓取票種後開始搶票", "info");
+        } else {
+            kktixAddLog("⚠️ 腳本注入已停用，請開啟「啟用腳本注入」開關", "warn");
         }
 
-        // 自動抓取票種
-        kktixFetchTickets();
+        // 自動抓取票種（僅在啟用時）
+        if (globalEnabled) {
+            kktixFetchTickets();
+        }
     });
 }
 
@@ -892,7 +898,7 @@ async function tcInit() {
     tcLoadSettings();
 
     chrome.storage.local.get(
-        ["tixcraft_isRunning", "tixcraft_savedLogs", "tixcraft_ocrVerifiedAt"],
+        ["tixcraft_isRunning", "tixcraft_savedLogs", "tixcraft_ocrVerifiedAt", "globalEnabled"],
         async (result) => {
             // 還原歷史日誌
             (result.tixcraft_savedLogs ?? []).forEach(({ time, message, type }) => {
@@ -912,13 +918,17 @@ async function tcInit() {
             }
 
             // 恢復執行狀態
+            const globalEnabled = result.globalEnabled !== false; // 預設為 true
+            
             if (result.tixcraft_isRunning) {
                 tcSetStatus("running", "搶票執行中...");
                 tcStartBtn.disabled = true;
                 tcStopBtn.disabled  = false;
                 tcAddLog("偵測到 Tixcraft 搶票流程仍在執行中", "warn");
-            } else {
+            } else if (globalEnabled) {
                 tcAddLog("Tixcraft 助手已載入，請設定場次日期與區域關鍵字後開始搶票", "info");
+            } else {
+                tcAddLog("⚠️ 腳本注入已停用，請開啟「啟用腳本注入」開關", "warn");
             }
         }
     );
@@ -1180,7 +1190,7 @@ function inLoadSettings() {
     chrome.storage.local.get([
         "inline_targetUrl", "inline_adultCount", "inline_kidCount", "inline_priorityPlan",
 "inline_reloadOnNoTime", "inline_reloadDelay", "inline_name", "inline_gender", "inline_phone",
-        "inline_email", "inline_purpose", "inline_note", "inline_autoAgree", "inline_isRunning", "inline_savedLogs"
+        "inline_email", "inline_purpose", "inline_note", "inline_autoAgree", "inline_isRunning", "inline_savedLogs", "globalEnabled"
     ], (r) => {
         inTargetUrlEl.value      = r.inline_targetUrl ?? "";
         inAdultCountEl.value     = r.inline_adultCount ?? 3;
@@ -1197,13 +1207,18 @@ function inLoadSettings() {
         inAutoAgreeEl.value      = String(r.inline_autoAgree ?? true);
 
         (r.inline_savedLogs ?? []).forEach(({ time, message, type }) => inRenderLogEntry(time, message, type));
+        
+        const globalEnabled = r.globalEnabled !== false; // 預設為 true
+        
         if (r.inline_isRunning) {
             inSetStatus("running", "Inline 流程執行中...");
             inStartBtn.disabled = true;
             inStopBtn.disabled = false;
             inAddLog("偵測到 Inline 流程仍在執行中", "warn");
-        } else {
+        } else if (globalEnabled) {
             inAddLog("Inline 助手已載入，已移除候補邏輯", "info");
+        } else {
+            inAddLog("⚠️ 腳本注入已停用，請開啟「啟用腳本注入」開關", "warn");
         }
     });
 }

@@ -1,7 +1,7 @@
 // ============================================================
 //  background.js — Service Worker（KKTIX + Tixcraft 整合版）
 //  負責：
-//    1. 以獨立視窗開啟 popup（避免點外側自動關閉）
+//    1. 在瀏覽器右側開啟側邊面板（Side Panel）
 //    2. KKTIX 頁面 reload 後自動重新注入腳本並恢復流程
 //    3. Tixcraft 頁面跳轉時自動重新注入腳本並恢復流程
 //    4. 代理 Tixcraft OCR API 請求（繞過混合內容限制）
@@ -12,38 +12,11 @@ const KKTIX_PATTERN = /^https:\/\/([a-z0-9-]+\.)?kktix\.com\//;
 const TIXCRAFT_PATTERN = /^https:\/\/([a-z0-9-]+\.)?tixcraft\.com\//;
 const INLINE_PATTERN = /^https:\/\/([a-z0-9-]+\.)?inline\.app\//;
 
-// ── 獨立視窗開啟 popup ───────────────────────────────────────
-// 點擊擴充功能圖示時，以獨立視窗開啟 popup.html，
-// 不使用 default_popup 以避免點外側自動關閉。
-let popupWindowId = null;
-
-chrome.action.onClicked.addListener(async () => {
-  // 若視窗已存在，聚焦至現有視窗
-  if (popupWindowId !== null) {
-    try {
-      await chrome.windows.update(popupWindowId, { focused: true });
-      return;
-    } catch (_) {
-      // 視窗已關閉，重置後重新建立
-      popupWindowId = null;
-    }
-  }
-
-  const win = await chrome.windows.create({
-    url: chrome.runtime.getURL("popup.html"),
-    type: "popup",
-    width: 320,
-    height: 620,
-    focused: true,
-  });
-  popupWindowId = win.id;
-});
-
-// 視窗關閉時清除記錄
-chrome.windows.onRemoved.addListener((windowId) => {
-  if (windowId === popupWindowId) {
-    popupWindowId = null;
-  }
+// ── 側邊面板開啟 ───────────────────────────────────────
+// 點擊擴充功能圖示時，在瀏覽器右側開啟側邊面板
+chrome.action.onClicked.addListener(async (tab) => {
+  // 開啟當前分頁的側邊面板
+  await chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
 // ── 分頁更新監聽器 ────────────────────────────────────────────

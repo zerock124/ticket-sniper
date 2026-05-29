@@ -28,6 +28,14 @@
   --green-bg: rgba(76, 175, 80, 0.12);
   --red:     #ef5350;
   --red-bg:  rgba(239, 83, 80, 0.12);
+
+  /* 平台專屬配色 */
+  --kktix-color:     #64c025;
+  --kktix-bg:        rgba(100, 192, 37, 0.12);
+  --kktix-border:    rgba(100, 192, 37, 0.3);
+  --tixcraft-color:  rgb(2, 108, 223);
+  --tixcraft-bg:     rgba(2, 108, 223, 0.12);
+  --tixcraft-border: rgba(2, 108, 223, 0.3);
   --amber:   #ffb300;
   --blue:    #42a5f5;
   --blue-bg: rgba(66, 165, 245, 0.12);
@@ -267,6 +275,10 @@ input:disabled + .slider { opacity: 0.45; cursor: not-allowed; }
   transition: color var(--transition), background var(--transition), border-color var(--transition);
   letter-spacing: 0.3px;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .platform-btn:hover {
@@ -279,6 +291,34 @@ input:disabled + .slider { opacity: 0.45; cursor: not-allowed; }
   background: var(--accent-primary);
   border-color: var(--accent-hover);
   box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* 平台圖示（圓形） */
+.platform-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: opacity var(--transition);
+}
+
+.platform-btn[data-platform="kktix"] .platform-icon {
+  background: var(--kktix-color);
+  box-shadow: 0 0 6px rgba(100, 192, 37, 0.4);
+}
+
+.platform-btn[data-platform="tixcraft"] .platform-icon {
+  background: var(--tixcraft-color);
+  box-shadow: 0 0 6px rgba(2, 108, 223, 0.4);
+}
+
+.platform-btn[data-platform="inline"] .platform-icon {
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(255, 179, 0, 0.4);
+}
+
+.platform-btn.active .platform-icon {
+  opacity: 0.8;
 }
 
 /* ── 平台面板 ────────────────────────────────────────────── */
@@ -464,15 +504,15 @@ input:disabled + .slider { opacity: 0.45; cursor: not-allowed; }
 }
 
 .platform-badge.platform-kktix {
-  background: var(--red-bg);
-  color: #ff7875;
-  border: 1px solid rgba(239, 83, 80, 0.3);
+  background: var(--kktix-bg);
+  color: var(--kktix-color);
+  border: 1px solid var(--kktix-border);
 }
 
 .platform-badge.platform-tixcraft {
-  background: var(--green-bg);
-  color: #69cc6d;
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: var(--tixcraft-bg);
+  color: var(--tixcraft-color);
+  border: 1px solid var(--tixcraft-border);
 }
 
 .hint {
