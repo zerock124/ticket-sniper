@@ -631,7 +631,7 @@ tcOcrApiUrlSelectEl.addEventListener("change", () => {
 
 async function tcCheckOcrServer() {
     const apiUrl = tcGetOcrApiUrl();
-    const healthUrl = apiUrl.replace(/\/ocr$/, "/health");
+    const healthUrl = apiUrl + "/health";
 
     try {
         const res = await fetch(healthUrl, {

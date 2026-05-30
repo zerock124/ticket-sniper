@@ -180,7 +180,7 @@ if (window.__tixcraftLoaded) {
 
         const result = await new Promise((resolve, reject) => {
             chrome.runtime.sendMessage(
-                { action: "OCR_REQUEST", ocrApiUrl: CONFIG.ocr_api_url, image: base64 },
+                { action: "OCR_REQUEST", ocrApiUrl: CONFIG.ocr_api_url + "/ocr", image: base64 },
                 (resp) => {
                     if (chrome.runtime.lastError) {
                         return reject(new Error(chrome.runtime.lastError.message));
