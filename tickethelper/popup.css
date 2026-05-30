@@ -15,9 +15,9 @@
   --border-default: #272738;
   --border-strong:  #33334a;
 
-  --text-primary:   #ffffff;
-  --text-secondary: #d0d0e0;
-  --text-muted:     #8888a8;
+  --text-primary:   #e8e8f0;
+  --text-secondary: #9090a8;
+  --text-muted:     #50506a;
   --text-link:      #7eb8ff;
 
   --accent-primary: #4a5fc0;
@@ -55,11 +55,11 @@
   --sp-5: 20px;
 
   /* 字體大小（用 clamp 做流體排版） */
-  --fs-xs:   clamp(12px, 2.2vw, 13px);
-  --fs-sm:   clamp(13px, 2.4vw, 14px);
-  --fs-base: clamp(14px, 2.6vw, 15px);
-  --fs-md:   clamp(15px, 2.8vw, 16px);
-  --fs-lg:   clamp(16px, 3vw,   18px);
+  --fs-xs:   clamp(10px, 1.8vw, 11px);
+  --fs-sm:   clamp(11px, 2vw,   12px);
+  --fs-base: clamp(12px, 2.2vw, 13px);
+  --fs-md:   clamp(13px, 2.4vw, 14px);
+  --fs-lg:   clamp(14px, 2.6vw, 16px);
 
   /* 動畫 */
   --transition: 0.18s ease;

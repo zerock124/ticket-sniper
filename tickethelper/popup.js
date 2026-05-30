@@ -36,10 +36,10 @@ function showToast(message, type = "info", duration = 2500) {
         <span class="toast-icon">${icons[type] || icons.info}</span>
         <span class="toast-text">${message}</span>
     `;
-    
+
     // 移除舊的類型樣式
     toastEl.className = "toast";
-    
+
     // 添加新的類型樣式並顯示
     toastEl.classList.add(type, "show");
 
@@ -66,19 +66,19 @@ chrome.storage.local.get(["globalEnabled"], (result) => {
 // 監聽開關變更
 globalEnableToggle.addEventListener("change", () => {
     const enabled = globalEnableToggle.checked;
-    
+
     // 儲存狀態
     chrome.storage.local.set({ globalEnabled: enabled }, () => {
         console.log(`[全域開關] 已${enabled ? "啟用" : "停用"}腳本注入`);
         showToast(
-            enabled ? "腳本注入已啟用" : "腳本注入已停用", 
+            enabled ? "腳本注入已啟用" : "腳本注入已停用",
             enabled ? "success" : "info"
         );
     });
-    
+
     // 更新 UI
     updateToggleUI(enabled);
-    
+
     // 通知所有 content scripts 狀態已改變
     chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
@@ -154,20 +154,20 @@ document.querySelectorAll("#panel-tixcraft .tab-btn").forEach(btn => {
 // ════════════════════════════════════════════════════════════════
 
 // ── KKTIX DOM 元素引用 ────────────────────────────────────────────
-const kktixBuyCountEl       = document.getElementById("kktix-buyCount");
-const kktixChooseAreaEl     = document.getElementById("kktix-chooseArea");
-const kktixMemberCodeEl     = document.getElementById("kktix-memberCode");
-const kktixQuestionEl       = document.getElementById("kktix-question");
+const kktixBuyCountEl = document.getElementById("kktix-buyCount");
+const kktixChooseAreaEl = document.getElementById("kktix-chooseArea");
+const kktixMemberCodeEl = document.getElementById("kktix-memberCode");
+const kktixQuestionEl = document.getElementById("kktix-question");
 const kktixTicketFallbackEl = document.getElementById("kktix-ticketFallback");
-const kktixReloadDelayEl    = document.getElementById("kktix-reloadDelay");
-const kktixStartBtn         = document.getElementById("kktix-startBtn");
-const kktixStopBtn          = document.getElementById("kktix-stopBtn");
-const kktixSaveBtn          = document.getElementById("kktix-saveBtn");
-const kktixSaveBtnLogic     = document.getElementById("kktix-saveBtnLogic");
-const kktixLogArea          = document.getElementById("kktix-logArea");
-const kktixStatusDot        = document.getElementById("kktix-statusDot");
-const kktixStatusText       = document.getElementById("kktix-statusText");
-const kktixClearLogBtn      = document.getElementById("kktix-clearLogBtn");
+const kktixReloadDelayEl = document.getElementById("kktix-reloadDelay");
+const kktixStartBtn = document.getElementById("kktix-startBtn");
+const kktixStopBtn = document.getElementById("kktix-stopBtn");
+const kktixSaveBtn = document.getElementById("kktix-saveBtn");
+const kktixSaveBtnLogic = document.getElementById("kktix-saveBtnLogic");
+const kktixLogArea = document.getElementById("kktix-logArea");
+const kktixStatusDot = document.getElementById("kktix-statusDot");
+const kktixStatusText = document.getElementById("kktix-statusText");
+const kktixClearLogBtn = document.getElementById("kktix-clearLogBtn");
 
 // 記錄勾選的票種優先順序
 let kktixCheckOrder = [];
@@ -214,12 +214,12 @@ function kktixRefreshBadges() {
 
 function kktixLoadSettings() {
     chrome.storage.local.get(
-        ["kktix_buyCount", "kktix_chooseArea", "kktix_memberCode", "kktix_question", 
-         "kktix_ticketFallback", "kktix_reloadDelay"],
+        ["kktix_buyCount", "kktix_chooseArea", "kktix_memberCode", "kktix_question",
+            "kktix_ticketFallback", "kktix_reloadDelay"],
         (result) => {
-            kktixBuyCountEl.value   = result.kktix_buyCount ?? 2;
+            kktixBuyCountEl.value = result.kktix_buyCount ?? 2;
             kktixMemberCodeEl.value = result.kktix_memberCode ?? "";
-            kktixQuestionEl.value   = result.kktix_question ?? "";
+            kktixQuestionEl.value = result.kktix_question ?? "";
             kktixTicketFallbackEl.value = result.kktix_ticketFallback ?? "refresh";
             kktixReloadDelayEl.value = result.kktix_reloadDelay ?? 1;
             // chooseArea 陣列顯示於 textarea（備用）
@@ -239,12 +239,12 @@ function kktixBuildSettings() {
         chooseArea = raw ? raw.split(/[,;]/).map(s => s.trim()).filter(Boolean) : [];
     }
     return {
-        buyCount:       parseInt(kktixBuyCountEl.value, 10) || 2,
+        buyCount: parseInt(kktixBuyCountEl.value, 10) || 2,
         chooseArea,
-        memberCode:     kktixMemberCodeEl.value.trim(),
-        question:       kktixQuestionEl.value.trim(),
+        memberCode: kktixMemberCodeEl.value.trim(),
+        question: kktixQuestionEl.value.trim(),
         ticketFallback: kktixTicketFallbackEl.value,
-        reloadDelay:    parseFloat(kktixReloadDelayEl.value) || 1,
+        reloadDelay: parseFloat(kktixReloadDelayEl.value) || 1,
     };
 }
 
@@ -414,34 +414,34 @@ kktixStartBtn.addEventListener("click", async () => {
     }
 
     chrome.storage.local.set({
-        kktix_buyCount:   settings.buyCount,
+        kktix_buyCount: settings.buyCount,
         kktix_memberCode: settings.memberCode,
-        kktix_question:   settings.question,
+        kktix_question: settings.question,
         kktix_ticketFallback: settings.ticketFallback,
-        kktix_reloadDelay:    settings.reloadDelay,
-        kktix_isRunning:  true,
+        kktix_reloadDelay: settings.reloadDelay,
+        kktix_isRunning: true,
         kktix_runningConfig: {
-            buyCount:       settings.buyCount,
-            chooseArea:     settings.chooseArea,
-            memberCode:     settings.memberCode,
-            question:       settings.question,
+            buyCount: settings.buyCount,
+            chooseArea: settings.chooseArea,
+            memberCode: settings.memberCode,
+            question: settings.question,
             ticketFallback: settings.ticketFallback,
-            reloadDelay:    settings.reloadDelay,
+            reloadDelay: settings.reloadDelay,
         },
     });
 
     kktixSetStatus("running", "搶票執行中...");
     kktixStartBtn.disabled = true;
-    kktixStopBtn.disabled  = false;
+    kktixStopBtn.disabled = false;
     kktixAddLog("🚀 開始 KKTIX 搶票流程", "info");
 
     await kktixSendToContent("START", {
-        buyCount:       settings.buyCount,
-        chooseArea:     settings.chooseArea,
-        memberCode:     settings.memberCode,
-        question:       settings.question,
+        buyCount: settings.buyCount,
+        chooseArea: settings.chooseArea,
+        memberCode: settings.memberCode,
+        question: settings.question,
         ticketFallback: settings.ticketFallback,
-        reloadDelay:    settings.reloadDelay,
+        reloadDelay: settings.reloadDelay,
     });
 });
 
@@ -449,7 +449,7 @@ kktixStopBtn.addEventListener("click", async () => {
     chrome.storage.local.set({ kktix_isRunning: false });
     kktixSetStatus("idle", "已停止");
     kktixStartBtn.disabled = false;
-    kktixStopBtn.disabled  = true;
+    kktixStopBtn.disabled = true;
     kktixAddLog("⏹ 使用者手動停止", "warn");
     await kktixSendToContent("STOP");
 });
@@ -458,10 +458,10 @@ kktixSaveBtn.addEventListener("click", () => {
     const settings = kktixBuildSettings();
     chrome.storage.local.set(
         {
-            kktix_buyCount:   settings.buyCount,
+            kktix_buyCount: settings.buyCount,
             kktix_chooseArea: settings.chooseArea,
             kktix_memberCode: settings.memberCode,
-            kktix_question:   settings.question,
+            kktix_question: settings.question,
         },
         () => {
             showToast("KKTIX 基礎設定已儲存", "success");
@@ -475,7 +475,7 @@ kktixSaveBtnLogic.addEventListener("click", () => {
     chrome.storage.local.set(
         {
             kktix_ticketFallback: settings.ticketFallback,
-            kktix_reloadDelay:    settings.reloadDelay,
+            kktix_reloadDelay: settings.reloadDelay,
         },
         () => {
             showToast("KKTIX 執行邏輯已儲存", "success");
@@ -500,11 +500,11 @@ function kktixInit() {
 
     chrome.storage.local.get(["kktix_isRunning", "globalEnabled"], (result) => {
         const globalEnabled = result.globalEnabled !== false; // 預設為 true
-        
+
         if (result.kktix_isRunning) {
             kktixSetStatus("running", "搶票執行中...");
             kktixStartBtn.disabled = true;
-            kktixStopBtn.disabled  = false;
+            kktixStopBtn.disabled = false;
             kktixAddLog("偵測到 KKTIX 搶票流程仍在執行中", "warn");
         } else if (globalEnabled) {
             kktixAddLog("KKTIX 助手已載入，請抓取票種後開始搶票", "info");
@@ -524,28 +524,28 @@ function kktixInit() {
 // ════════════════════════════════════════════════════════════════
 
 // ── Tixcraft DOM 元素引用 ─────────────────────────────────────────
-const tcBuyCountEl          = document.getElementById("tixcraft-buyCount");
-const tcChooseDateEl        = document.getElementById("tixcraft-chooseDate");
-const tcChooseAreaEl        = document.getElementById("tixcraft-chooseArea");
-const tcExcludeAreaEl       = document.getElementById("tixcraft-excludeArea");
-const tcOcrApiUrlSelectEl   = document.getElementById("tixcraft-ocrApiUrlSelect");
-const tcOcrApiUrlCustomEl   = document.getElementById("tixcraft-ocrApiUrlCustom");
-const tcAreaFallbackEl      = document.getElementById("tixcraft-areaFallback");
-const tcDateFallbackEl      = document.getElementById("tixcraft-dateFallback");
-const tcReloadDelayEl       = document.getElementById("tixcraft-reloadDelay");
-const tcTargetUrlEl         = document.getElementById("tixcraft-targetUrl");
-const tcVerifyCodeEl        = document.getElementById("tixcraft-verifyCode");
-const tcStartBtn            = document.getElementById("tixcraft-startBtn");
-const tcStopBtn             = document.getElementById("tixcraft-stopBtn");
-const tcSaveBtn             = document.getElementById("tixcraft-saveBtn");
-const tcSaveBtnLogic        = document.getElementById("tixcraft-saveBtnLogic");
-const tcLogArea             = document.getElementById("tixcraft-logArea");
-const tcStatusDot           = document.getElementById("tixcraft-statusDot");
-const tcStatusText          = document.getElementById("tixcraft-statusText");
-const tcOcrDot              = document.getElementById("tixcraft-ocrDot");
-const tcOcrLabel            = document.getElementById("tixcraft-ocrLabel");
-const tcCheckOcrBtn         = document.getElementById("tixcraft-checkOcrBtn");
-const tcClearLogBtn         = document.getElementById("tixcraft-clearLogBtn");
+const tcBuyCountEl = document.getElementById("tixcraft-buyCount");
+const tcChooseDateEl = document.getElementById("tixcraft-chooseDate");
+const tcChooseAreaEl = document.getElementById("tixcraft-chooseArea");
+const tcExcludeAreaEl = document.getElementById("tixcraft-excludeArea");
+const tcOcrApiUrlSelectEl = document.getElementById("tixcraft-ocrApiUrlSelect");
+const tcOcrApiUrlCustomEl = document.getElementById("tixcraft-ocrApiUrlCustom");
+const tcAreaFallbackEl = document.getElementById("tixcraft-areaFallback");
+const tcDateFallbackEl = document.getElementById("tixcraft-dateFallback");
+const tcReloadDelayEl = document.getElementById("tixcraft-reloadDelay");
+const tcTargetUrlEl = document.getElementById("tixcraft-targetUrl");
+const tcVerifyCodeEl = document.getElementById("tixcraft-verifyCode");
+const tcStartBtn = document.getElementById("tixcraft-startBtn");
+const tcStopBtn = document.getElementById("tixcraft-stopBtn");
+const tcSaveBtn = document.getElementById("tixcraft-saveBtn");
+const tcSaveBtnLogic = document.getElementById("tixcraft-saveBtnLogic");
+const tcLogArea = document.getElementById("tixcraft-logArea");
+const tcStatusDot = document.getElementById("tixcraft-statusDot");
+const tcStatusText = document.getElementById("tixcraft-statusText");
+const tcOcrDot = document.getElementById("tixcraft-ocrDot");
+const tcOcrLabel = document.getElementById("tixcraft-ocrLabel");
+const tcCheckOcrBtn = document.getElementById("tixcraft-checkOcrBtn");
+const tcClearLogBtn = document.getElementById("tixcraft-clearLogBtn");
 
 // 日誌最大保留筆數
 const TC_MAX_LOG_ENTRIES = 300;
@@ -673,32 +673,32 @@ function tcLoadSettings() {
             "tixcraft_verifyCode",
         ],
         (result) => {
-            tcBuyCountEl.value    = result.tixcraft_buyCount ?? 2;
-            tcChooseDateEl.value  = result.tixcraft_chooseDate ?? "";
-            tcChooseAreaEl.value  = result.tixcraft_chooseArea ?? "";
+            tcBuyCountEl.value = result.tixcraft_buyCount ?? 2;
+            tcChooseDateEl.value = result.tixcraft_chooseDate ?? "";
+            tcChooseAreaEl.value = result.tixcraft_chooseArea ?? "";
             tcExcludeAreaEl.value = result.tixcraft_excludeArea ?? "輪椅,身障,身心障礙,Restricted View,燈柱遮蔽,視線不完整";
             tcSetOcrApiUrl(result.tixcraft_ocrApiUrl ?? "http://localhost:5511/ocr");
-            tcAreaFallbackEl.value  = result.tixcraft_areaFallback ?? "refresh";
-            tcDateFallbackEl.value  = result.tixcraft_dateFallback ?? "refresh";
-            tcReloadDelayEl.value   = result.tixcraft_reloadDelay ?? 1;
-            tcTargetUrlEl.value     = result.tixcraft_targetUrl ?? "";
-            tcVerifyCodeEl.value    = result.tixcraft_verifyCode ?? "";
+            tcAreaFallbackEl.value = result.tixcraft_areaFallback ?? "refresh";
+            tcDateFallbackEl.value = result.tixcraft_dateFallback ?? "refresh";
+            tcReloadDelayEl.value = result.tixcraft_reloadDelay ?? 1;
+            tcTargetUrlEl.value = result.tixcraft_targetUrl ?? "";
+            tcVerifyCodeEl.value = result.tixcraft_verifyCode ?? "";
         }
     );
 }
 
 function tcBuildSettings() {
     return {
-        buyCount:     parseInt(tcBuyCountEl.value, 10) || 2,
-        chooseDate:   tcChooseDateEl.value.trim(),
-        chooseArea:   tcChooseAreaEl.value.trim(),
-        excludeArea:  tcExcludeAreaEl.value.trim(),
-        ocrApiUrl:    tcGetOcrApiUrl(),
+        buyCount: parseInt(tcBuyCountEl.value, 10) || 2,
+        chooseDate: tcChooseDateEl.value.trim(),
+        chooseArea: tcChooseAreaEl.value.trim(),
+        excludeArea: tcExcludeAreaEl.value.trim(),
+        ocrApiUrl: tcGetOcrApiUrl(),
         areaFallback: tcAreaFallbackEl.value,
         dateFallback: tcDateFallbackEl.value,
-        reloadDelay:  parseFloat(tcReloadDelayEl.value) || 1,
-        targetUrl:    tcTargetUrlEl.value.trim(),
-        verifyCode:   tcVerifyCodeEl.value.trim(),
+        reloadDelay: parseFloat(tcReloadDelayEl.value) || 1,
+        targetUrl: tcTargetUrlEl.value.trim(),
+        verifyCode: tcVerifyCodeEl.value.trim(),
     };
 }
 
@@ -775,34 +775,34 @@ tcStartBtn.addEventListener("click", async () => {
     const chooseAreaArr = tcParseKeywords(settings.chooseArea);
 
     chrome.storage.local.set({
-        tixcraft_buyCount:    settings.buyCount,
-        tixcraft_chooseDate:  settings.chooseDate,
-        tixcraft_chooseArea:  settings.chooseArea,
+        tixcraft_buyCount: settings.buyCount,
+        tixcraft_chooseDate: settings.chooseDate,
+        tixcraft_chooseArea: settings.chooseArea,
         tixcraft_excludeArea: settings.excludeArea,
-        tixcraft_ocrApiUrl:   settings.ocrApiUrl,
+        tixcraft_ocrApiUrl: settings.ocrApiUrl,
         tixcraft_areaFallback: settings.areaFallback,
         tixcraft_dateFallback: settings.dateFallback,
-        tixcraft_reloadDelay:  settings.reloadDelay,
-        tixcraft_targetUrl:    settings.targetUrl,
-        tixcraft_verifyCode:   settings.verifyCode,
-        tixcraft_isRunning:   true,
+        tixcraft_reloadDelay: settings.reloadDelay,
+        tixcraft_targetUrl: settings.targetUrl,
+        tixcraft_verifyCode: settings.verifyCode,
+        tixcraft_isRunning: true,
         tixcraft_runningConfig: {
-            buyCount:     settings.buyCount,
-            chooseDate:   settings.chooseDate,
-            chooseArea:   settings.chooseArea,
-            excludeArea:  settings.excludeArea,
-            ocrApiUrl:    settings.ocrApiUrl,
+            buyCount: settings.buyCount,
+            chooseDate: settings.chooseDate,
+            chooseArea: settings.chooseArea,
+            excludeArea: settings.excludeArea,
+            ocrApiUrl: settings.ocrApiUrl,
             areaFallback: settings.areaFallback,
             dateFallback: settings.dateFallback,
-            reloadDelay:  settings.reloadDelay,
-            targetUrl:    settings.targetUrl,
-            verifyCode:   settings.verifyCode,
+            reloadDelay: settings.reloadDelay,
+            targetUrl: settings.targetUrl,
+            verifyCode: settings.verifyCode,
         },
     });
 
     tcSetStatus("running", "搶票執行中...");
     tcStartBtn.disabled = true;
-    tcStopBtn.disabled  = false;
+    tcStopBtn.disabled = false;
     tcAddLog("🚀 開始 Tixcraft 搶票流程", "info");
 
     if (settings.targetUrl) tcAddLog(`目標網址：${settings.targetUrl}`, "info");
@@ -824,16 +824,16 @@ tcStartBtn.addEventListener("click", async () => {
     }
 
     await tcSendToContent("START", {
-        buyCount:     settings.buyCount,
-        chooseDate:   chooseDateArr,
-        chooseArea:   chooseAreaArr,
-        excludeArea:  settings.excludeArea,
-        ocrApiUrl:    settings.ocrApiUrl,
+        buyCount: settings.buyCount,
+        chooseDate: chooseDateArr,
+        chooseArea: chooseAreaArr,
+        excludeArea: settings.excludeArea,
+        ocrApiUrl: settings.ocrApiUrl,
         areaFallback: settings.areaFallback,
         dateFallback: settings.dateFallback,
-        reloadDelay:  settings.reloadDelay,
-        targetUrl:    settings.targetUrl,
-        verifyCode:   settings.verifyCode,
+        reloadDelay: settings.reloadDelay,
+        targetUrl: settings.targetUrl,
+        verifyCode: settings.verifyCode,
     });
 });
 
@@ -841,7 +841,7 @@ tcStopBtn.addEventListener("click", async () => {
     chrome.storage.local.set({ tixcraft_isRunning: false });
     tcSetStatus("idle", "已停止");
     tcStartBtn.disabled = false;
-    tcStopBtn.disabled  = true;
+    tcStopBtn.disabled = true;
     tcAddLog("⏹ 使用者手動停止", "warn");
     await tcSendToContent("STOP");
 });
@@ -850,13 +850,13 @@ tcSaveBtn.addEventListener("click", () => {
     const settings = tcBuildSettings();
     chrome.storage.local.set(
         {
-            tixcraft_buyCount:    settings.buyCount,
-            tixcraft_chooseDate:  settings.chooseDate,
-            tixcraft_chooseArea:  settings.chooseArea,
+            tixcraft_buyCount: settings.buyCount,
+            tixcraft_chooseDate: settings.chooseDate,
+            tixcraft_chooseArea: settings.chooseArea,
             tixcraft_excludeArea: settings.excludeArea,
-            tixcraft_ocrApiUrl:   settings.ocrApiUrl,
-            tixcraft_targetUrl:   settings.targetUrl,
-            tixcraft_verifyCode:  settings.verifyCode,
+            tixcraft_ocrApiUrl: settings.ocrApiUrl,
+            tixcraft_targetUrl: settings.targetUrl,
+            tixcraft_verifyCode: settings.verifyCode,
         },
         () => {
             showToast("Tixcraft 基礎設定已儲存", "success");
@@ -871,7 +871,7 @@ tcSaveBtnLogic.addEventListener("click", () => {
         {
             tixcraft_areaFallback: settings.areaFallback,
             tixcraft_dateFallback: settings.dateFallback,
-            tixcraft_reloadDelay:  settings.reloadDelay,
+            tixcraft_reloadDelay: settings.reloadDelay,
         },
         () => {
             showToast("Tixcraft 執行邏輯已儲存", "success");
@@ -919,11 +919,11 @@ async function tcInit() {
 
             // 恢復執行狀態
             const globalEnabled = result.globalEnabled !== false; // 預設為 true
-            
+
             if (result.tixcraft_isRunning) {
                 tcSetStatus("running", "搶票執行中...");
                 tcStartBtn.disabled = true;
-                tcStopBtn.disabled  = false;
+                tcStopBtn.disabled = false;
                 tcAddLog("偵測到 Tixcraft 搶票流程仍在執行中", "warn");
             } else if (globalEnabled) {
                 tcAddLog("Tixcraft 助手已載入，請設定場次日期與區域關鍵字後開始搶票", "info");
@@ -949,7 +949,7 @@ chrome.runtime.onMessage.addListener((msg) => {
                 chrome.storage.local.set({ kktix_isRunning: false });
                 kktixSetStatus("idle", "流程完成");
                 kktixStartBtn.disabled = false;
-                kktixStopBtn.disabled  = true;
+                kktixStopBtn.disabled = true;
                 kktixAddLog("🎉 KKTIX 所有步驟完成！", "success");
                 break;
             case "RELOAD":
@@ -973,7 +973,7 @@ chrome.runtime.onMessage.addListener((msg) => {
                 chrome.storage.local.set({ tixcraft_isRunning: false });
                 tcSetStatus("idle", "流程完成");
                 tcStartBtn.disabled = false;
-                tcStopBtn.disabled  = true;
+                tcStopBtn.disabled = true;
                 tcAddLog("🎉 Tixcraft 所有步驟完成！", "success");
                 break;
             case "RELOAD":
@@ -1007,39 +1007,39 @@ document.querySelectorAll("#panel-inline .tab-btn").forEach(btn => {
     });
 });
 
-const inTargetUrlEl      = document.getElementById("inline-targetUrl");
-const inAdultCountEl     = document.getElementById("inline-adultCount");
-const inKidCountEl       = document.getElementById("inline-kidCount");
-const inPriorityPlanEl   = document.getElementById("inline-priorityPlan");
-const inExactDateEl      = document.getElementById("inline-exactDate");
-const inExactTimeEl      = document.getElementById("inline-exactTime");
-const inAddExactBtn      = document.getElementById("inline-addExactBtn");
-const inExactListEl      = document.getElementById("inline-exactList");
-const inRangeDateEl      = document.getElementById("inline-rangeDate");
-const inRangeStartEl     = document.getElementById("inline-rangeStart");
-const inRangeEndEl       = document.getElementById("inline-rangeEnd");
-const inAddRangeBtn      = document.getElementById("inline-addRangeBtn");
-const inRangeListEl      = document.getElementById("inline-rangeList");
-const inAnyDateEl        = document.getElementById("inline-anyDate");
-const inAddAnyBtn        = document.getElementById("inline-addAnyBtn");
-const inAnyListEl        = document.getElementById("inline-anyList");
+const inTargetUrlEl = document.getElementById("inline-targetUrl");
+const inAdultCountEl = document.getElementById("inline-adultCount");
+const inKidCountEl = document.getElementById("inline-kidCount");
+const inPriorityPlanEl = document.getElementById("inline-priorityPlan");
+const inExactDateEl = document.getElementById("inline-exactDate");
+const inExactTimeEl = document.getElementById("inline-exactTime");
+const inAddExactBtn = document.getElementById("inline-addExactBtn");
+const inExactListEl = document.getElementById("inline-exactList");
+const inRangeDateEl = document.getElementById("inline-rangeDate");
+const inRangeStartEl = document.getElementById("inline-rangeStart");
+const inRangeEndEl = document.getElementById("inline-rangeEnd");
+const inAddRangeBtn = document.getElementById("inline-addRangeBtn");
+const inRangeListEl = document.getElementById("inline-rangeList");
+const inAnyDateEl = document.getElementById("inline-anyDate");
+const inAddAnyBtn = document.getElementById("inline-addAnyBtn");
+const inAnyListEl = document.getElementById("inline-anyList");
 const inReloadOnNoTimeEl = document.getElementById("inline-reloadOnNoTime");
-const inReloadDelayEl    = document.getElementById("inline-reloadDelay");
-const inNameEl           = document.getElementById("inline-name");
-const inGenderEl         = document.getElementById("inline-gender");
-const inPhoneEl          = document.getElementById("inline-phone");
-const inEmailEl          = document.getElementById("inline-email");
-const inPurposeEl        = document.getElementById("inline-purpose");
-const inNoteEl           = document.getElementById("inline-note");
-const inAutoAgreeEl      = document.getElementById("inline-autoAgree");
-const inStartBtn         = document.getElementById("inline-startBtn");
-const inStopBtn          = document.getElementById("inline-stopBtn");
-const inSaveBtn          = document.getElementById("inline-saveBtn");
-const inSaveContactBtn   = document.getElementById("inline-saveContactBtn");
-const inClearLogBtn      = document.getElementById("inline-clearLogBtn");
-const inLogArea          = document.getElementById("inline-logArea");
-const inStatusDot        = document.getElementById("inline-statusDot");
-const inStatusText       = document.getElementById("inline-statusText");
+const inReloadDelayEl = document.getElementById("inline-reloadDelay");
+const inNameEl = document.getElementById("inline-name");
+const inGenderEl = document.getElementById("inline-gender");
+const inPhoneEl = document.getElementById("inline-phone");
+const inEmailEl = document.getElementById("inline-email");
+const inPurposeEl = document.getElementById("inline-purpose");
+const inNoteEl = document.getElementById("inline-note");
+const inAutoAgreeEl = document.getElementById("inline-autoAgree");
+const inStartBtn = document.getElementById("inline-startBtn");
+const inStopBtn = document.getElementById("inline-stopBtn");
+const inSaveBtn = document.getElementById("inline-saveBtn");
+const inSaveContactBtn = document.getElementById("inline-saveContactBtn");
+const inClearLogBtn = document.getElementById("inline-clearLogBtn");
+const inLogArea = document.getElementById("inline-logArea");
+const inStatusDot = document.getElementById("inline-statusDot");
+const inStatusText = document.getElementById("inline-statusText");
 
 const INLINE_MAX_LOG_ENTRIES = 300;
 
@@ -1169,54 +1169,54 @@ function inParseKeywords(raw) {
 
 function inBuildSettings() {
     return {
-        targetUrl:      inTargetUrlEl.value.trim(),
-        adultCount:     parseInt(inAdultCountEl.value, 10) || 1,
-        kidCount:       inKidCountEl.value.trim(),
-        priorityPlan:   JSON.parse(JSON.stringify(inPriorityPlanState)),
+        targetUrl: inTargetUrlEl.value.trim(),
+        adultCount: parseInt(inAdultCountEl.value, 10) || 1,
+        kidCount: inKidCountEl.value.trim(),
+        priorityPlan: JSON.parse(JSON.stringify(inPriorityPlanState)),
         reloadOnNoTime: inReloadOnNoTimeEl.value === "true",
-        reloadDelay:    parseFloat(inReloadDelayEl.value) || 2,
-        name:           inNameEl.value.trim(),
-        gender:         inGenderEl.value,
-        phone:          inPhoneEl.value.trim(),
-        email:          inEmailEl.value.trim(),
-        purpose:        inPurposeEl.value.trim(),
-        purposes:       inParseKeywords(inPurposeEl.value),
-        note:           inNoteEl.value.trim(),
-        autoAgree:      inAutoAgreeEl.value === "true",
+        reloadDelay: parseFloat(inReloadDelayEl.value) || 2,
+        name: inNameEl.value.trim(),
+        gender: inGenderEl.value,
+        phone: inPhoneEl.value.trim(),
+        email: inEmailEl.value.trim(),
+        purpose: inPurposeEl.value.trim(),
+        purposes: inParseKeywords(inPurposeEl.value),
+        note: inNoteEl.value.trim(),
+        autoAgree: inAutoAgreeEl.value === "true",
     };
 }
 
 function inLoadSettings() {
     chrome.storage.local.get([
         "inline_targetUrl", "inline_adultCount", "inline_kidCount", "inline_priorityPlan",
-"inline_reloadOnNoTime", "inline_reloadDelay", "inline_name", "inline_gender", "inline_phone",
+        "inline_reloadOnNoTime", "inline_reloadDelay", "inline_name", "inline_gender", "inline_phone",
         "inline_email", "inline_purpose", "inline_note", "inline_autoAgree", "inline_isRunning", "inline_savedLogs", "globalEnabled"
     ], (r) => {
-        inTargetUrlEl.value      = r.inline_targetUrl ?? "";
-        inAdultCountEl.value     = r.inline_adultCount ?? 3;
-        inKidCountEl.value       = r.inline_kidCount ?? "";
+        inTargetUrlEl.value = r.inline_targetUrl ?? "";
+        inAdultCountEl.value = r.inline_adultCount ?? 2;
+        inKidCountEl.value = r.inline_kidCount ?? "";
         inLoadPriorityPlan(r.inline_priorityPlan ?? "");
-        inReloadOnNoTimeEl.value = String(r.inline_reloadOnNoTime ?? false);
-        inReloadDelayEl.value    = r.inline_reloadDelay ?? 2;
-        inNameEl.value           = r.inline_name ?? "";
-        inGenderEl.value         = r.inline_gender ?? "小姐";
-        inPhoneEl.value          = r.inline_phone ?? "";
-        inEmailEl.value          = r.inline_email ?? "";
-        inPurposeEl.value        = r.inline_purpose ?? "";
-        inNoteEl.value           = r.inline_note ?? "";
-        inAutoAgreeEl.value      = String(r.inline_autoAgree ?? true);
+        inReloadOnNoTimeEl.value = String(r.inline_reloadOnNoTime ?? true);
+        inReloadDelayEl.value = r.inline_reloadDelay ?? 1;
+        inNameEl.value = r.inline_name ?? "";
+        inGenderEl.value = r.inline_gender ?? "先生";
+        inPhoneEl.value = r.inline_phone ?? "";
+        inEmailEl.value = r.inline_email ?? "";
+        inPurposeEl.value = r.inline_purpose ?? "";
+        inNoteEl.value = r.inline_note ?? "";
+        inAutoAgreeEl.value = String(r.inline_autoAgree ?? true);
 
         (r.inline_savedLogs ?? []).forEach(({ time, message, type }) => inRenderLogEntry(time, message, type));
-        
+
         const globalEnabled = r.globalEnabled !== false; // 預設為 true
-        
+
         if (r.inline_isRunning) {
             inSetStatus("running", "Inline 流程執行中...");
             inStartBtn.disabled = true;
             inStopBtn.disabled = false;
             inAddLog("偵測到 Inline 流程仍在執行中", "warn");
         } else if (globalEnabled) {
-            inAddLog("Inline 助手已載入，已移除候補邏輯", "info");
+            inAddLog("Inline 助手已載入", "info");
         } else {
             inAddLog("⚠️ 腳本注入已停用，請開啟「啟用腳本注入」開關", "warn");
         }
@@ -1343,17 +1343,13 @@ inStartBtn.addEventListener("click", async () => {
     }
 
     inSaveSettings(false);
-    chrome.storage.local.set({
-        inline_isRunning: true,
-        inline_runningConfig: s,
-    });
+    // 不在注入前預先寫入 inline_isRunning，避免 content script auto-resume 與手動 START 同時啟動。
+    // START 送達 content script 後，content script 會自行寫入 inline_isRunning / inline_runningConfig。
+    chrome.storage.local.remove(["inline_successReloadCount"]);
 
     inSetStatus("running", "Inline 流程執行中...");
     inStartBtn.disabled = true;
     inStopBtn.disabled = false;
-    inAddLog("🚀 開始 Inline 自動前置流程", "info");
-    inAddLog("安全限制：最後『確認訂位』仍需手動確認", "warn");
-
     await inSendToContent("START", s);
 });
 
@@ -1379,11 +1375,11 @@ chrome.runtime.onMessage.addListener((msg) => {
             break;
         case "DONE":
             chrome.storage.local.set({ inline_isRunning: false });
-            inSetStatus("idle", "已停在最後確認前");
+            inSetStatus("idle", "訂位完成");
             inStartBtn.disabled = false;
             inStopBtn.disabled = true;
-            inAddLog(msg.text || "已停在最後確認訂位前", "success");
-            showToast("Inline 已填妥，請手動確認", "success", 4000);
+            inAddLog("Inline 訂位完成", "success");
+            showToast("Inline 訂位完成", "success", 4000);
             break;
         case "RELOAD":
             inAddLog("🔄 Inline 頁面重新整理中...", "warn");
