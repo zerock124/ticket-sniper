@@ -1,10 +1,5 @@
 // ============================================================
-// inline/inline-content.refactor.js — Inline 訂位助手 內容腳本（Tixcraft 風格重構版）
-//
-// 目標：
-//   1. 保留原本已測試過的選日期、選時間、填資料與送出結果。
-//   2. 將流程命名、狀態控制、訊息處理方式整理成接近 tixcraft-content.js 的風格。
-//   3. 不新增 CAPTCHA / PX 驗證處理。
+// inline/inline-content.refactor.js — Inline 訂位助手
 //
 // 流程說明：
 //   START → 讀取 popup 傳入設定 → 選擇人數 → 依三段式順位選日期/時間
@@ -18,10 +13,10 @@
 
   // ── 可調整等待秒數 / 間隔 ─────────────────────────────────────
   // 選位頁點擊 submit 後，等待進入 /form 或 /success 的時間。
-  const WAIT_FORM_TIMEOUT_MS = 5000;
+  const WAIT_FORM_TIMEOUT_MS = 10000;
 
   // 聯絡資訊頁點擊 submit 後，等待進入 /success 的時間。
-  const WAIT_SUCCESS_TIMEOUT_MS = 6000;
+  const WAIT_SUCCESS_TIMEOUT_MS = 10000;
 
   // 等待 submit 按鈕結構出現的時間。
   const WAIT_SUBMIT_BUTTON_TIMEOUT_MS = 4000;
@@ -141,15 +136,303 @@
     const start = Date.now();
     while (Date.now() - start < timeout) {
       if (!isRunning) return null;
-      // fn 可能是同步函式，也可能是 async 函式。
-      // v9 這裡沒有 await，導致 fillContactForm() 的 Promise 被當成「已找到」，
-      // 實際只檢查一次就結束，所以畫面已到聯絡頁時仍不會填。
       const result = await fn();
       if (result) return result;
       await delay(interval);
     }
     return null;
   }
+
+  // ── Inline 聯絡資訊頁穩定 selector / 表單工具 ─────────────────────
+  // 原則：使用 id / data-cy / name / autocomplete / aria-label / label-for；不依賴 sc-* 動態 class。
+  function qsa(root, selector) {
+    try { return [...(root || document).querySelectorAll(selector)]; } catch (_) { return []; }
+  }
+
+  function firstVisible(root, selectors) {
+    for (const selector of selectors) {
+      const hit = qsa(root, selector).find(isVisible);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function cssEscapeValue(value) {
+    if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(String(value));
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function findFormRoot() {
+    return document.querySelector("form#contact-form")
+      || document.querySelector("#contact-form")
+      || document.querySelector("form[action='javascript:void(0)']")
+      || document;
+  }
+
+  function findInputByLabelText(labelPattern, root = findFormRoot()) {
+    const label = qsa(root, "label").filter(isVisible).find(l => labelPattern.test(norm(l.innerText || l.textContent || "")));
+    if (!label) return null;
+
+    const forId = label.getAttribute("for");
+    if (forId) {
+      const byFor = root.querySelector(`#${cssEscapeValue(forId)}`) || document.querySelector(`#${cssEscapeValue(forId)}`);
+      if (byFor && isVisible(byFor)) return byFor;
+    }
+
+    const local = label.querySelector("input, textarea, select");
+    if (local && isVisible(local)) return local;
+
+    let cursor = label.nextElementSibling;
+    while (cursor) {
+      const hit = cursor.matches?.("input, textarea, select") ? cursor : cursor.querySelector?.("input, textarea, select");
+      if (hit && isVisible(hit)) return hit;
+      cursor = cursor.nextElementSibling;
+    }
+    return null;
+  }
+
+  function splitChineseName(fullName) {
+    const name = String(fullName || "").trim().replace(/\s+/g, "");
+    if (!name) return { familyName: "", givenName: "" };
+    const compoundSurnames = ["歐陽", "司馬", "上官", "諸葛", "夏侯", "皇甫", "尉遲", "公孫", "慕容", "司徒", "令狐", "東方", "西門", "南宮", "宇文", "長孫"];
+    const familyName = compoundSurnames.find(s => name.startsWith(s)) || name.slice(0, 1);
+    return { familyName, givenName: name.slice(familyName.length) };
+  }
+
+  function fillNameFields(root = findFormRoot()) {
+    const fullName = String(CONFIG.name || "").trim();
+    if (!fullName) return true;
+
+    const family = firstVisible(root, [
+      "input#familyName[data-cy='familyName']",
+      "input[data-cy='familyName']",
+      "input#familyName",
+      "input[autocomplete='family-name']",
+      "#nameFields input[placeholder='姓']"
+    ]);
+    const given = firstVisible(root, [
+      "input#givenName[data-cy='givenName']",
+      "input[data-cy='givenName']",
+      "input#givenName",
+      "input[autocomplete='given-name']",
+      "#nameFields input[placeholder='名']"
+    ]);
+
+    if (family || given) {
+      const parts = splitChineseName(fullName);
+      if (family) setNativeValue(family, parts.familyName || fullName);
+      if (given) setNativeValue(given, parts.givenName || "");
+      return true;
+    }
+
+    const singleName = firstVisible(root, [
+      "input#name[data-cy='name']",
+      "input[data-cy='name']",
+      "input#name",
+      "input[autocomplete='name']"
+    ]) || findInputByLabelText(/訂位人姓名|姓名/, root);
+    if (!singleName) return false;
+    setNativeValue(singleName, fullName);
+    return true;
+  }
+
+  function fillPhoneField(root = findFormRoot()) {
+    if (!CONFIG.phone) return true;
+    const phone = firstVisible(root, [
+      "input#phone[data-cy='phone']",
+      "input[data-cy='phone']",
+      "input#phone",
+      "input[type='tel']",
+      "input[autocomplete='tel']"
+    ]) || findInputByLabelText(/手機|電話|phone/i, root);
+    if (!phone) return false;
+    setNativeValue(phone, CONFIG.phone);
+    return true;
+  }
+
+  function fillEmailField(root = findFormRoot()) {
+    if (!CONFIG.email) return true;
+    const email = firstVisible(root, [
+      "input#email[data-cy='email']",
+      "input[data-cy='email']",
+      "input#email",
+      "input[type='email']",
+      "input[autocomplete='email']"
+    ]) || findInputByLabelText(/email|e-mail|電子信箱/i, root);
+    if (!email) return false;
+    setNativeValue(email, CONFIG.email);
+    return true;
+  }
+
+  function fillNoteField(root = findFormRoot()) {
+    if (!CONFIG.note) return true;
+    const textarea = firstVisible(root, ["textarea[data-cy='note']", "textarea[data-cy='memo']", "textarea[aria-invalid]", "textarea"])
+      || findInputByLabelText(/其他備註|備註|特殊需求|note|memo/i, root);
+    if (!textarea) return false;
+    setNativeValue(textarea, CONFIG.note);
+    return true;
+  }
+
+  function fillCardholderNameField(root = findFormRoot()) {
+    const cardholderName = String(CONFIG.cardholderName || CONFIG.name || "").trim();
+    if (!cardholderName) return true;
+    const field = firstVisible(root, [
+      "input#cardholder-name[data-cy='cardholder-name']",
+      "input[data-cy='cardholder-name']",
+      "input#cardholder-name",
+      "input[name='cardholder-name']",
+      "input[autocomplete='cc-name']"
+    ]) || findInputByLabelText(/持卡人姓名|cardholder|持卡人/i, root);
+    if (!field) return true;
+    setNativeValue(field, cardholderName);
+    return true;
+  }
+
+  function getFormVersionInfo(root = findFormRoot()) {
+    const hasSingleName = !!firstVisible(root, ["input#name[data-cy='name']", "input[data-cy='name']", "input#name", "input[autocomplete='name']"]);
+    const hasSplitName = !!firstVisible(root, ["input#familyName[data-cy='familyName']", "input[data-cy='familyName']", "input#familyName", "input[autocomplete='family-name']"]);
+    const hasPayment = !!root.querySelector("[data-cy='booking-payment-form'], [aria-label='credit card number'], [data-cy='card-number'], #card-number");
+    const hasInvoice = !!root.querySelector("[data-cy='invoice-info'], #invoice-type, #tw-duplicate-invoice, #tw-triplicate-invoice");
+    return { hasSingleName, hasSplitName, hasPayment, hasInvoice };
+  }
+
+  function logFormVersionOnce(root = findFormRoot()) {
+    if (window.__INLINE_HELPER_FORM_VERSION_LOGGED__) return;
+    window.__INLINE_HELPER_FORM_VERSION_LOGGED__ = true;
+    const v = getFormVersionInfo(root);
+    const nameVersion = v.hasSplitName ? "姓名拆欄版" : (v.hasSingleName ? "單一姓名版" : "未知姓名版");
+    sendLog(`Inline 表單版本：${nameVersion} / ${v.hasPayment ? "含付款區" : "無付款區"} / ${v.hasInvoice ? "含發票區" : "無發票區"}`, "info");
+  }
+
+  function detectSecurePaymentBlock(root = findFormRoot()) {
+    const paymentRoot = root.querySelector("[data-cy='booking-payment-form']") || root;
+    const cardNumber = paymentRoot.querySelector("[data-cy='card-number'], #card-number, [aria-label='credit card number']");
+    const cardExpiry = paymentRoot.querySelector("[data-cy='card-expiry'], #card-expiry, [aria-label='credit card expiry date']");
+    const cardSecurityCode = paymentRoot.querySelector("[data-cy='card-security-code'], #card-security-code, [aria-label='credit card security code']");
+    const tappayFrame = paymentRoot.querySelector("iframe[src*='tappay-field'], iframe[src*='js.tappaysdk.com']");
+    return { required: !!(cardNumber || cardExpiry || cardSecurityCode || tappayFrame), cardNumber: !!cardNumber, cardExpiry: !!cardExpiry, cardSecurityCode: !!cardSecurityCode, tappayFrame: !!tappayFrame };
+  }
+
+  async function hydrateCardConfigFromStorageIfNeeded() {
+    // START 訊息偶爾可能沒有帶到信用卡欄位，尤其使用者停在 /form 或 popup UI 尚未重新載入時。
+    // 付款頁只要出現，就再從 chrome.storage.local 補一次，避免誤判「未設定完整卡號 / 效期 / CCV」。
+    const before = {
+      autoCardFill: CONFIG.autoCardFill,
+      autoSubmitPayment: CONFIG.autoSubmitPayment,
+      cardNumber: CONFIG.cardNumber,
+      cardExpiry: CONFIG.cardExpiry,
+      cardCcv: CONFIG.cardCcv,
+      cardholderName: CONFIG.cardholderName
+    };
+
+    const saved = await storageGet([
+      "inline_autoCardFill",
+      "inline_autoSubmitPayment",
+      "inline_cardNumber",
+      "inline_cardExpiry",
+      "inline_cardCcv",
+      "inline_cardholderName"
+    ]);
+
+    if (CONFIG.autoCardFill !== true && saved.inline_autoCardFill === true) CONFIG.autoCardFill = true;
+    if (CONFIG.autoSubmitPayment !== true && saved.inline_autoSubmitPayment === true) CONFIG.autoSubmitPayment = true;
+    if (!String(CONFIG.cardNumber || "").trim() && saved.inline_cardNumber) CONFIG.cardNumber = saved.inline_cardNumber;
+    if (!String(CONFIG.cardExpiry || "").trim() && saved.inline_cardExpiry) CONFIG.cardExpiry = saved.inline_cardExpiry;
+    if (!String(CONFIG.cardCcv || "").trim() && saved.inline_cardCcv) CONFIG.cardCcv = saved.inline_cardCcv;
+    if (!String(CONFIG.cardholderName || "").trim() && saved.inline_cardholderName) CONFIG.cardholderName = saved.inline_cardholderName;
+
+    const changed = before.autoCardFill !== CONFIG.autoCardFill
+      || before.autoSubmitPayment !== CONFIG.autoSubmitPayment
+      || String(before.cardNumber || "") !== String(CONFIG.cardNumber || "")
+      || String(before.cardExpiry || "") !== String(CONFIG.cardExpiry || "")
+      || String(before.cardCcv || "") !== String(CONFIG.cardCcv || "")
+      || String(before.cardholderName || "") !== String(CONFIG.cardholderName || "");
+
+    if (changed) sendLog("已從本機儲存補齊 Inline 信用卡設定", "info");
+  }
+
+  function hasCardAutoFillConfig() {
+    return CONFIG.autoCardFill === true
+      && !!String(CONFIG.cardNumber || "").trim()
+      && !!String(CONFIG.cardExpiry || "").trim()
+      && !!String(CONFIG.cardCcv || "").trim();
+  }
+
+  function paymentErrorIsShown(el) {
+    if (!el) return false;
+    if (el.hidden || el.hasAttribute("hidden")) return false;
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+    // TapPay/Inline 的錯誤 div 有時高度很小或被 layout 包住；付款驗證不能只靠 rect。
+    return true;
+  }
+
+  function paymentValidationErrors(root = findFormRoot()) {
+    return qsa(root, "[data-cy='card-number-is-empty-error'], [data-cy='card-number-is-invalid-error'], [data-cy='card-expiry-is-empty-error'], [data-cy='card-expiry-is-invalid-error'], [data-cy='card-security-code-is-empty-error'], [data-cy='card-security-code-is-invalid-error']")
+      .filter(paymentErrorIsShown)
+      .map(el => norm(el.innerText || el.textContent || el.getAttribute("data-cy") || ""))
+      .filter(Boolean);
+  }
+
+  function hasVisibleValidationError(root = findFormRoot()) {
+    return qsa(root, "[data-cy$='-error'], [data-cy*='-is-empty-error'], [data-cy*='-is-invalid-error']")
+      .filter(el => !el.hidden && isVisible(el))
+      .map(el => norm(el.innerText || el.textContent || el.getAttribute("data-cy") || ""))
+      .filter(Boolean);
+  }
+
+  function tapPayValue(type) {
+    if (type === "card-number") return String(CONFIG.cardNumber || "");
+    if (type === "expiration-date") return String(CONFIG.cardExpiry || "");
+    if (type === "ccv") return String(CONFIG.cardCcv || "");
+    return "";
+  }
+
+  async function sendTapPayCommand(type, value, timeout = 7000) {
+    const id = `${Date.now()}-${type}-${Math.random().toString(36).slice(2)}`;
+    await storageSet({ inline_tappayCommand: { id, type, value }, inline_tappayFilledStatus: {} });
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const data = await storageGet(["inline_tappayFilledStatus"]);
+      const hit = data.inline_tappayFilledStatus?.[type];
+      if (hit && hit.commandId === id) return hit;
+      await delay(120);
+    }
+    return { ok: false, reason: "timeout", actual: "" };
+  }
+
+  async function fillTapPayFieldsSequential(root = findFormRoot()) {
+    const fields = [
+      { type: "card-number", box: root.querySelector("[data-cy='card-number'], #card-number, [aria-label='credit card number']") },
+      { type: "expiration-date", box: root.querySelector("[data-cy='card-expiry'], #card-expiry, [aria-label='credit card expiry date']") },
+      { type: "ccv", box: root.querySelector("[data-cy='card-security-code'], #card-security-code, [aria-label='credit card security code']") }
+    ];
+
+    for (const f of fields) {
+      const value = tapPayValue(f.type);
+      if (!value) return false;
+      const iframe = f.box?.matches?.("iframe") ? f.box : f.box?.querySelector?.("iframe");
+      try { f.box?.scrollIntoView?.({ block: "center", inline: "center" }); } catch (_) { }
+      await delay(80);
+      try { f.box?.click?.(); } catch (_) { }
+      try { iframe?.focus?.(); } catch (_) { }
+      await delay(120);
+      const result = await sendTapPayCommand(f.type, value);
+      sendLog(`TapPay ${f.type} 回報：${result.ok ? "已輸入" : "失敗"}${result.reason ? ` (${result.reason})` : ""}`, result.ok ? "info" : "warn");
+      await delay(220);
+    }
+
+    const start = Date.now();
+    let last = [];
+    while (Date.now() - start < 6000) {
+      last = paymentValidationErrors(root);
+      if (!last.length) return true;
+      await delay(180);
+    }
+    if (last.length) sendLog(`TapPay 父頁仍顯示信用卡驗證錯誤：${last.join("、")}`, "warn");
+    return false;
+  }
+
 
   function parseClockToMin(t) {
     const m = String(t || "").trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -269,22 +552,34 @@
     return document.querySelector("#date-picker, [data-cy='date-picker']")?.innerText || "";
   }
 
+  function getCalendarPicker() {
+    return document.querySelector("#calendar-picker, [data-cy='calendar-picker']");
+  }
+
+  function getCalendarRoot() {
+    const picker = getCalendarPicker();
+    return picker && isVisible(picker) ? picker : document;
+  }
+
   function visibleCalendarText() {
-    return document.body.innerText || "";
+    const picker = getCalendarPicker();
+    if (picker && isVisible(picker)) return picker.innerText || "";
+    return "";
   }
 
   function findCalendarHeaders() {
-    return [...document.querySelectorAll("button, [role='button'], div, span")]
+    const root = getCalendarRoot();
+    return [...root.querySelectorAll("[data-cy='calendar'] h4, h4")]
       .filter(isVisible)
       .map(el => {
         const text = (el.innerText || el.textContent || "").trim();
-        const m = text.match(/(\d{4})年\s*(\d{1,2})月/);
+        const m = text.match(/^(\d{4})年\s*(\d{1,2})月$/);
         if (!m) return null;
         const rect = el.getBoundingClientRect();
         return { el, year: Number(m[1]), month: Number(m[2]), text, top: rect.top, left: rect.left, area: rect.width * rect.height };
       })
       .filter(Boolean)
-      .sort((a, b) => (a.top - b.top) || (a.left - b.left) || (a.area - b.area));
+      .sort((a, b) => (a.left - b.left) || (a.top - b.top) || (a.area - b.area));
   }
 
   function domBefore(a, b) {
@@ -297,56 +592,189 @@
     return `${obj.year}-${String(obj.month).padStart(2, "0")}`;
   }
 
+  function calendarMonthValue(obj) {
+    if (!obj?.year || !obj?.month) return null;
+    return Number(obj.year) * 12 + Number(obj.month);
+  }
+
+  function visibleCalendarMonths() {
+    const seen = new Set();
+    return findCalendarHeaders()
+      .map(h => ({ year: h.year, month: h.month, value: calendarMonthValue(h), text: h.text }))
+      .filter(m => {
+        const key = `${m.year}-${m.month}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.value - b.value);
+  }
+
+  function visibleMonthLabel() {
+    const months = visibleCalendarMonths();
+    return months.length ? months.map(m => `${m.year}年${m.month}月`).join("、") : "無可見月份";
+  }
+
+  function inferTargetYear(month) {
+    const months = visibleCalendarMonths();
+    if (months.length) {
+      const sameMonth = months.find(m => m.month === Number(month));
+      if (sameMonth) return sameMonth.year;
+      return months[0].year;
+    }
+    return new Date().getFullYear();
+  }
+
+  function normalizeTargetDate(rowOrText) {
+    const p = rowDateParts(rowOrText);
+    if (p.month && p.day && !p.year) p.year = inferTargetYear(p.month);
+    return p;
+  }
+
+  function targetIso(target) {
+    if (!target?.year || !target?.month || !target?.day) return "";
+    return `${target.year}-${String(target.month).padStart(2, "0")}-${String(target.day).padStart(2, "0")}`;
+  }
+
+  function findCalendarNavButton(direction) {
+    const root = getCalendarRoot();
+    const selector = direction === "prev" ? ".prevMonth" : ".nextMonth";
+    const hits = [...root.querySelectorAll(selector)]
+      .map(el => el.closest("button, [role='button'], a") || el)
+      .filter(el => el && isVisible(el) && !isDisabled(el))
+      .map(el => {
+        const rect = el.getBoundingClientRect();
+        return { el, left: rect.left, top: rect.top, area: rect.width * rect.height };
+      })
+      .sort((a, b) => direction === "prev"
+        ? (a.left - b.left) || (a.top - b.top) || (a.area - b.area)
+        : (b.left - a.left) || (a.top - b.top) || (a.area - b.area));
+    if (hits.length) return hits[0].el;
+
+    const exact = direction === "prev" ? "-" : "+";
+    const pattern = direction === "prev" ? /上一|上個|prev|previous|‹|«|〈|＜|-/ : /下一|下個|next|›|»|〉|＞|\+/;
+    const textHits = [...root.querySelectorAll("button, [role='button'], div, span, a")]
+      .filter(isVisible)
+      .filter(el => !isDisabled(el))
+      .map(el => {
+        const rootEl = el.closest("button, [role='button'], a") || el;
+        const rect = rootEl.getBoundingClientRect();
+        const t = norm(el.innerText || el.textContent || el.getAttribute("aria-label") || "");
+        return { el: rootEl, t, left: rect.left, top: rect.top, area: rect.width * rect.height };
+      })
+      .filter(x => x.t === exact || pattern.test(x.t))
+      .sort((a, b) => direction === "prev"
+        ? (a.left - b.left) || (a.top - b.top) || (a.area - b.area)
+        : (b.left - a.left) || (a.top - b.top) || (a.area - b.area));
+    return textHits[0]?.el || null;
+  }
+
+  async function waitCalendarChanged(beforeKey, timeout = 1000) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      if (!isRunning) return false;
+      const nowKey = visibleCalendarMonths().map(m => `${m.year}-${m.month}`).join(",");
+      if (nowKey && nowKey !== beforeKey) return true;
+      await delay(40);
+    }
+    return false;
+  }
+
   async function ensureCalendarMonthVisible(target) {
     if (!target.year || !target.month) return true;
-    const headerText = `${target.year}年${target.month}月`;
+    if (!(await openDatePicker())) return false;
+
+    const targetValue = calendarMonthValue(target);
+    const targetLabel = `${target.year}年${target.month}月`;
+
     for (let i = 0; i < 14; i++) {
-      if (visibleCalendarText().includes(headerText)) return true;
-      const nextBtn = [...document.querySelectorAll("button, [role='button'], div, span, a")]
-        .filter(isVisible)
-        .filter(el => !isDisabled(el))
-        .map(el => {
-          const t = norm(el.innerText || el.textContent || el.getAttribute("aria-label") || "");
-          const rect = el.getBoundingClientRect();
-          return { el: el.closest("button, [role='button']") || el, t, area: rect.width * rect.height };
-        })
-        .filter(x => x.t === "+" || /下一|下個|next|›|»|〉|＞/.test(x.t))
-        .sort((a, b) => a.area - b.area)[0]?.el;
-      if (!nextBtn || !safeClick(nextBtn)) return false;
-      await delay(250);
+      if (!isRunning) return false;
+      const months = visibleCalendarMonths();
+      const currentLabel = visibleMonthLabel();
+
+      if (months.some(m => m.value === targetValue)) return true;
+      if (!months.length) {
+        sendLog(`日期選單沒有可見月份`, "warn");
+        return false;
+      }
+
+      const first = months[0].value;
+      const last = months[months.length - 1].value;
+      const direction = targetValue < first ? "prev" : "next";
+      if (targetValue >= first && targetValue <= last) return true;
+
+      sendLog(`目標月份 ${targetLabel} 不在目前日曆 ${currentLabel}，按${direction === "prev" ? "上一月" : "下一月"}`, "info");
+      const beforeKey = months.map(m => `${m.year}-${m.month}`).join(",");
+      const btn = findCalendarNavButton(direction);
+      if (!btn || !safeClick(btn)) {
+        sendLog(`找不到${direction === "prev" ? "上" : "下"}一月按鈕，目前日曆：${currentLabel}`, "warn");
+        return false;
+      }
+      await waitCalendarChanged(beforeKey, 1200);
+      await delay(80);
     }
-    return visibleCalendarText().includes(headerText);
+
+    return visibleCalendarMonths().some(m => m.value === targetValue);
   }
 
   async function openDatePicker() {
-    const datePicker = document.querySelector("#date-picker, [data-cy='date-picker']");
+    const datePicker = await waitFor(() => document.querySelector("#date-picker, [data-cy='date-picker']"), 2000, 50);
     if (!datePicker) return false;
-    if (datePicker.getAttribute("aria-expanded") !== "true") {
+
+    const picker = getCalendarPicker();
+    if (picker && isVisible(picker) && findCalendarHeaders().length) return true;
+
+    for (let i = 0; i < 3; i++) {
+      if (!isRunning) return false;
       safeClick(datePicker);
-      await delay(250);
+      const opened = await waitFor(() => {
+        const p = getCalendarPicker();
+        return p && isVisible(p) && findCalendarHeaders().length ? p : null;
+      }, 900, 50);
+      if (opened) return true;
+      await delay(80);
     }
-    return true;
+
+    sendLog("日期選單沒有成功展開", "warn");
+    return false;
   }
 
   function findDateElement(dateText, row = null) {
-    const target = rowDateParts(row || dateText);
+    const target = normalizeTargetDate(row || dateText);
     if (!target.day) return null;
+
+    const iso = targetIso(target);
+    if (iso) {
+      const root = getCalendarRoot();
+      const exact = root.querySelector(`[data-cy='bt-cal-day'][data-date='${iso}']`);
+      if (!exact) {
+        sendLog(`找不到日期節點：${iso}；目前日曆：${visibleMonthLabel()}`, "warn");
+        return null;
+      }
+      if (!isVisible(exact)) {
+        sendLog(`日期節點存在但不可見：${iso}`, "warn");
+        return null;
+      }
+      if (isDisabled(exact)) {
+        sendLog(`日期節點存在但 disabled：${iso}`, "warn");
+        return null;
+      }
+      return exact;
+    }
 
     const dayText = String(target.day);
     const headers = findCalendarHeaders();
     const targetKey = monthKey(target);
 
-    const raw = [...document.querySelectorAll("button, [role='button'], div, span, a")]
+    const raw = [...getCalendarRoot().querySelectorAll("[data-cy='bt-cal-day']")]
       .filter(isVisible)
       .filter(el => !isDisabled(el))
       .map(el => {
         const text = norm(el.innerText || el.textContent || "");
         const rect = el.getBoundingClientRect();
-        const clickable = el.closest("button, [role='button']") || el;
-        return { el: clickable, rawEl: el, text, rect, area: rect.width * rect.height };
+        return { el, rawEl: el, text, rect, area: rect.width * rect.height };
       })
       .filter(x => x.text === dayText || x.text === `${target.month || ""}月${dayText}日` || x.text.includes(norm(dateText)))
-      .filter(x => !x.el.closest(".prevMonth, .nextMonth"))
       .filter(x => x.rect.width <= 120 && x.rect.height <= 120)
       .sort((a, b) => (a.area - b.area));
 
@@ -359,23 +787,17 @@
         return nearest && monthKey(nearest) === targetKey;
       });
       if (matched.length) return matched[0].el;
-
-      // fallback：以畫面座標判斷在同一個月份區塊附近，避免 5/29 與 6/29 同時出現時點錯前一個月
-      const targetHeaders = headers.filter(h => monthKey(h) === targetKey);
-      if (targetHeaders.length) {
-        const h = targetHeaders[targetHeaders.length - 1];
-        const hr = h.el.getBoundingClientRect();
-        const spatial = raw.filter(x => x.rect.top > hr.top && Math.abs(x.rect.left - hr.left) < 420);
-        if (spatial.length) return spatial[0].el;
-      }
     }
 
     return raw[0]?.el || null;
   }
 
   async function chooseDate(dateText, row = null) {
-    await openDatePicker();
-    const target = rowDateParts(row || dateText);
+    if (!(await openDatePicker())) return false;
+
+    const target = normalizeTargetDate(row || dateText);
+    sendLog(`準備選日期：${dateText}；目前日曆：${visibleMonthLabel()}`, "info");
+
     if (!(await ensureCalendarMonthVisible(target))) {
       sendLog(`找不到月份：${target.year || ""}年${target.month || ""}月`, "warn");
       return false;
@@ -385,13 +807,15 @@
     if (!el) return false;
     if (!safeClick(el)) return false;
 
-    await delay(200);
-    const picked = norm(currentDatePickerText());
     const day = String(target.day || "");
     const month = String(target.month || "");
-    const ok = picked.includes(day) && (!month || picked.includes(`${month}月`));
+    const ok = await waitFor(() => {
+      const picked = norm(currentDatePickerText());
+      return picked.includes(day) && (!month || picked.includes(`${month}月`));
+    }, 900, 50);
+
     if (!ok) sendLog(`日期點擊後頁面顯示為：${currentDatePickerText() || "空白"}`, "warn");
-    return ok;
+    return !!ok;
   }
 
   function timeElements() {
@@ -781,7 +1205,7 @@
 
   function hasFormPageSignature() {
     if (/\/booking\/[^/]+\/[^/]+\/form(?:[?#].*)?$/.test(window.location.href)) return true;
-    return !!(document.querySelector("#contact-form") || document.querySelector("#name, #phone, #email"));
+    return !!(document.querySelector("#contact-form") || document.querySelector("#name, #familyName, #givenName, #phone, #email, [data-cy='name'], [data-cy='familyName'], [data-cy='phone'], [data-cy='email'], [data-cy='booking-payment-form']"));
   }
 
   function hasBookingPageSignature() {
@@ -875,7 +1299,7 @@
 
   async function alreadyCompletedGuard(reason = "") {
     if (inlineDone || currentPhase === "DONE") return true;
-    if (detectPageType() === "SUCCESS" && hasSuccessCompleteSignature()) {
+    if (detectPageType() === "SUCCESS") {
       if (reason) sendLog(`${reason}，但已偵測到成功頁完整特徵，停止後續動作`, "success");
       await finishInlineDone();
       return true;
@@ -977,19 +1401,33 @@
   }
 
   function fillContactFields() {
-    const hasForm = document.querySelector("#contact-form") || document.querySelector("#name, #phone, #email");
+    const formRoot = findFormRoot();
+    const hasForm = formRoot !== document
+      || document.querySelector("#name, #familyName, #givenName, #phone, #email, [data-cy='name'], [data-cy='familyName'], [data-cy='phone'], [data-cy='email'], [data-cy='booking-payment-form']");
     if (!hasForm) return false;
 
-    if (CONFIG.name) setNativeValue(document.querySelector("#name, [data-cy='name'], input[autocomplete='name']"), CONFIG.name);
+    logFormVersionOnce(formRoot);
+
+    const results = {
+      name: fillNameFields(formRoot),
+      phone: fillPhoneField(formRoot),
+      email: fillEmailField(formRoot),
+      note: fillNoteField(formRoot),
+      cardholderName: fillCardholderNameField(formRoot)
+    };
+
     chooseGender();
-    if (CONFIG.phone) setNativeValue(document.querySelector("#phone, [data-cy='phone'], input[type='tel']"), CONFIG.phone);
-    if (CONFIG.email) setNativeValue(document.querySelector("#email, [data-cy='email'], input[type='email']"), CONFIG.email);
     clickPurpose();
-    if (CONFIG.note) {
-      const textarea = document.querySelector("textarea, [data-cy='note'], [data-cy='memo']");
-      if (textarea) setNativeValue(textarea, CONFIG.note);
-    }
     checkAgreement();
+
+    const failed = Object.entries(results)
+      .filter(([key, ok]) => CONFIG[key] && !ok)
+      .map(([key]) => key);
+    if (failed.length) sendLog(`聯絡資訊部分欄位找不到或填寫失敗：${failed.join(", ")}`, "warn");
+
+    const validationErrors = hasVisibleValidationError(formRoot);
+    if (validationErrors.length) sendLog(`表單目前仍有可見驗證訊息：${validationErrors.slice(0, 4).join("、")}`, "warn");
+
     return true;
   }
 
@@ -1000,6 +1438,42 @@
     if (!finalBtn) {
       sendLog("找不到最終 submit 結構按鈕", "warn");
       return false;
+    }
+
+    const securePayment = detectSecurePaymentBlock(formRoot);
+    if (securePayment.required) {
+      finalBtn.scrollIntoView({ block: "center" });
+      finalReadyEmitted = true;
+      window.__INLINE_HELPER_FINAL_READY__ = true;
+
+      await hydrateCardConfigFromStorageIfNeeded();
+
+      if (!hasCardAutoFillConfig()) {
+        isRunning = false;
+        await storageSet({ inline_isRunning: false });
+        sendEvent("FINAL_READY", "偵測到信用卡綁定 / 付款版 Inline 表單；未設定完整卡號 / 效期 / CCV，已停在確認訂位前。", "warn");
+        sendLog("偵測到信用卡綁定 / 付款版表單，但未設定完整卡號 / 效期 / CCV，已停止在最終送出前。", "warn");
+        return false;
+      }
+
+      sendLog("TapPay rebuild v2：偵測到信用卡 iframe，開始依序預填卡號 / 效期 / 安全碼", "info");
+      const cardOk = await fillTapPayFieldsSequential(formRoot);
+      if (!cardOk) {
+        isRunning = false;
+        await storageSet({ inline_isRunning: false });
+        sendEvent("FINAL_READY", "信用卡欄位未通過 Inline / TapPay 驗證，已停在確認訂位前。", "warn");
+        return false;
+      }
+
+      if (CONFIG.autoSubmitPayment !== true) {
+        isRunning = false;
+        await storageSet({ inline_isRunning: false });
+        sendEvent("FINAL_READY", "信用卡欄位已通過父頁驗證，已停在確認訂位前。", "success");
+        sendLog("信用卡欄位已通過父頁驗證；依設定停在最終送出前。", "success");
+        return false;
+      }
+
+      sendLog("信用卡欄位已通過父頁驗證；依設定自動確認訂位。", "success");
     }
 
     finalBtn.scrollIntoView({ block: "center" });
@@ -1028,6 +1502,8 @@
     await delay(120);
 
     if (!(await clickFormSubmit())) {
+      // 付款表單若刻意停在確認前、或信用卡資料不完整，不要跳回訂位頁重跑。
+      if (finalReadyEmitted && !isRunning) return false;
       await goToBookingPageOnError("找不到最終 submit 按鈕");
       return false;
     }
@@ -1044,28 +1520,11 @@
 
   async function successStep() {
     if (inlineDone || currentPhase === "DONE") return true;
-    if (successCheckInProgress) return true;
-    successCheckInProgress = true;
+
     currentPhase = "SUCCESS";
-    sendLog("已進入訂位成功頁，等待成功訊息或行事曆彈窗", "info");
+    sendLog("已進入訂位成功頁，流程完成", "success");
 
-    const complete = await waitFor(() => {
-      const d = getSuccessDiagnostics();
-      console.log(`[Inline助手] success check: ${formatSuccessDiagnostics(d)}`);
-      return d.complete;
-    }, WAIT_SUCCESS_READY_TIMEOUT_MS, WAIT_PAGE_INTERVAL_MS);
-
-    const finalDiagnostics = getSuccessDiagnostics();
-    console.log(`[Inline助手] final success check: ${formatSuccessDiagnostics(finalDiagnostics)}`);
-
-    if (!complete) {
-      successCheckInProgress = false;
-      return handleIncompleteSuccessPage("已到 success 頁，但未偵測到成功頁完整特徵");
-    }
-
-    const done = await finishInlineDone("已確認訂位成功頁與成功訊息/行事曆彈窗");
-    successCheckInProgress = false;
-    return done;
+    return finishInlineDone("已進入訂位成功頁");
   }
 
   // ── 主流程 ─────────────────────────────────────────────────────
@@ -1108,6 +1567,7 @@
       isRunning = false;
       navigationInProgress = false;
       currentPhase = "IDLE";
+      storageSet({ inline_isRunning: false });
       storageRemove(["inline_runningConfig", "inline_successReloadCount"]);
       runToken++;
       sendLog("Inline 流程已停止", "warn");
@@ -1162,10 +1622,8 @@
     currentPhase = "AUTO_RESUME";
     const token = ++runToken;
     sendLog("偵測到 Inline 流程仍在執行中，自動接續檢查", "info");
-    if (detectPageType() === "SUCCESS" && hasSuccessCompleteSignature()) {
-      const d = getSuccessDiagnostics();
-      console.log(`[Inline助手] auto-resume success check: ${formatSuccessDiagnostics(d)}`);
-      finishInlineDone("已確認訂位成功頁與成功訊息/行事曆彈窗");
+    if (detectPageType() === "SUCCESS") {
+      await finishInlineDone("已進入訂位成功頁");
       return;
     }
     runFlow(token);

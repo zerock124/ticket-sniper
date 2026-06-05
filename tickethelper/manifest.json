@@ -18,7 +18,8 @@
     "https://inline.app/*",
     "https://*.inline.app/*",
     "http://localhost:*/*",
-    "https://localhost:*/*"
+    "https://localhost:*/*",
+    "https://js.tappaysdk.com/*"
   ],
   "action": {
     "default_title": "搶票助手 Pro"
@@ -69,6 +70,16 @@
         "inline/inline-content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://js.tappaysdk.com/*"
+      ],
+      "js": [
+        "inline/tappay-field-content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "background": {
