@@ -49,66 +49,35 @@ if (window.__kktixLoaded) {
 
     // ── 工具函式 ─────────────────────────────────────────────────
 
-    // 延遲
-    function delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    // 停止檢查旗標函式（供 shared.js 的函式使用）
+    function isStopped() {
+        return shouldStop;
     }
 
-    // 傳送紀錄訊息給 popup
-    function sendLog(text, type = "info") {
-        console.log(`[搶票助手][KKTIX] ${text}`);
-        chrome.runtime.sendMessage({ from: "kktix-content", event: "LOG", text, type });
+    // 覆蓋 sendLog 以自動添加 source
+    const _originalSendLog = window.sendLog;
+    function sendLogKKTIX(text, type = "info") {
+        _originalSendLog(text, type, "KKTIX");
     }
 
-    // 傳送事件給 popup
-    function sendEvent(event, extra = {}) {
-        chrome.runtime.sendMessage({ from: "kktix-content", event, ...extra });
+    // 覆蓋 sendEvent 以自動添加 source
+    const _originalSendEvent = window.sendEvent;
+    function sendEventKKTIX(event, extra = {}) {
+        _originalSendEvent(event, extra, "KKTIX");
     }
 
-    // 模擬真實輸入（觸發 Angular/Vue 等框架的雙向綁定）
-    function typeInput(element, text) {
-        if (!element) return;
-        element.focus();
-        element.value = "";
-        for (const char of text) {
-            element.value += char;
-            element.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-        element.dispatchEvent(new Event("change", { bubbles: true }));
+    // 覆蓋 typeInput 以使用 KKTIX 的逐字輸入模式
+    const _originalTypeInput = window.typeInput;
+    function typeInputKKTIX(element, text) {
+        _originalTypeInput(element, text, true); // stepByStep = true
     }
 
     // 帶重試的點擊
     async function clickWithRetry(selector, options = {}) {
-        const {
-            maxAttempts = 10,
-            clickCount = 1,
-            context = document,
-        } = options;
-        let attempts = 0;
-
-        while (attempts < maxAttempts) {
-            // 檢查是否被要求停止
-            if (shouldStop) throw new Error("使用者已停止");
-
-            const el = context.querySelector(selector);
-            if (el) {
-                for (let i = 0; i < clickCount; i++) {
-                    el.click();
-                    // 確認數量欄位是否已達預期值
-                    const input = randomUnit.querySelector(
-                        "input.ng-pristine.ng-untouched.ng-valid.ng-not-empty, input[type='number']"
-                    );
-                    if (input.value == CONFIG.buy_count) {
-                        break;
-                    }
-                }
-                return true;
-            }
-            attempts++;
-            await delay(300);
-        }
-
-        throw new Error(`找不到元素 ${selector}（已嘗試 ${maxAttempts} 次）`);
+        return window.clickWithRetry(selector, {
+            ...options,
+            shouldStop: isStopped,
+        });
     }
 
     // ── 搶票步驟 ─────────────────────────────────────────────────
@@ -140,15 +109,15 @@ if (window.__kktixLoaded) {
             const matched = validUnits.filter(u => u.textContent.includes(price));
             if (matched.length > 0) {
                 selectedUnit = matched[Math.floor(Math.random() * matched.length)];
-                sendLog(`依優先順序選擇金額 ${price}`, "success");
+                sendLogKKTIX(`依優先順序選擇金額 ${price}`, "success");
                 break;
             }
         }
 
         // 找不到指定金額 → 重新整理後重試
         if (!selectedUnit) {
-            sendLog("⚠️ 找不到指定金額票種，重新整理頁面...", "warn");
-            sendEvent("RELOAD");
+            sendLogKKTIX("⚠️ 找不到指定金額票種，重新整理頁面...", "warn");
+            sendEventKKTIX("RELOAD");
             await delay(500);
             window.location.reload();
             return;
@@ -201,15 +170,15 @@ if (window.__kktixLoaded) {
         // 會員代碼
         const membership = document.querySelector("input.member-code");
         if (membership && CONFIG.membercode) {
-            typeInput(membership, CONFIG.membercode);
-            sendLog("已填入會員代碼");
+            typeInputKKTIX(membership, CONFIG.membercode);
+            sendLogKKTIX("已填入會員代碼");
         }
 
         // 驗證問題答案
         const captcha = document.querySelector("div.captcha input");
         if (captcha && CONFIG.question) {
-            typeInput(captcha, CONFIG.question);
-            sendLog("已填入問題答案");
+            typeInputKKTIX(captcha, CONFIG.question);
+            sendLogKKTIX("已填入問題答案");
         }
     }
 
@@ -223,7 +192,7 @@ if (window.__kktixLoaded) {
         let currentStep = 0;
         let errorCount = 0;
 
-        sendLog("等待票券頁面載入...");
+        sendLogKKTIX("等待票券頁面載入...");
 
         // 等待票券列表元素出現
         let showpage = document.querySelector(".ticket-list-wrapper.ng-scope");
@@ -233,7 +202,7 @@ if (window.__kktixLoaded) {
         }
 
         if (shouldStop) {
-            sendLog("流程已停止", "warn");
+            sendLogKKTIX("流程已停止", "warn");
             isRunning = false;
             return;
         }
@@ -254,20 +223,20 @@ if (window.__kktixLoaded) {
 
             } catch (err) {
                 if (err.message === "使用者已停止") {
-                    sendLog("流程已停止", "warn");
+                    sendLogKKTIX("流程已停止", "warn");
                     break;
                 }
 
                 errorCount++;
-                sendLog(
+                sendLogKKTIX(
                     `⚠️ Step ${currentStep + 1} 錯誤（第 ${errorCount} 次）：${err.message}`,
                     "warn"
                 );
 
                 // 錯誤超過 5 次 → 重新整理
                 if (errorCount >= 5) {
-                    sendLog("錯誤過多，重新整理頁面...", "error");
-                    sendEvent("RELOAD");
+                    sendLogKKTIX("錯誤過多，重新整理頁面...", "error");
+                    sendEventKKTIX("RELOAD");
                     await delay(500);
                     window.location.reload();
                     return;
@@ -278,8 +247,8 @@ if (window.__kktixLoaded) {
         }
 
         if (!shouldStop) {
-            sendLog("所有步驟完成！", "success");
-            sendEvent("DONE");
+            sendLogKKTIX("所有步驟完成！", "success");
+            sendEventKKTIX("DONE");
         }
 
         isRunning = false;
@@ -288,10 +257,34 @@ if (window.__kktixLoaded) {
     // ── 攔截 alert 並重整 ────────────────────────────────────────
     const originalAlert = window.alert;
     window.alert = function (message) {
-        sendLog(`⚠️ 攔截到 alert：${message}`, "warn");
+        sendLogKKTIX(`⚠️ 攔截到 alert：${message}`, "warn");
         originalAlert.apply(window, arguments);
         window.location.reload();
     };
+
+    // ── DOM 就緒後自動恢復 KKTIX 進度（reload 之後可自動重新執行）
+    function onDomReady() {
+        chrome.storage.local.get(["kktix_isRunning", "kktix_runningConfig"], (result) => {
+            if (!result.kktix_isRunning || !result.kktix_runningConfig || isRunning) return;
+
+            const cfg = result.kktix_runningConfig;
+            CONFIG.buy_count = cfg.buyCount ?? 1;
+            CONFIG.choose_area = Array.isArray(cfg.chooseArea)
+                ? cfg.chooseArea
+                : (cfg.chooseArea ? cfg.chooseArea.split(/[,;]/).map(s => s.trim()).filter(Boolean) : []);
+            CONFIG.membercode = cfg.memberCode ?? "";
+            CONFIG.question = cfg.question ?? "";
+
+            sendLogKKTIX("⚙️ 自動啟動 KKTIX 搶票流程", "info");
+            runStepsWithResume();
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", onDomReady);
+    } else {
+        onDomReady();
+    }
 
     // ── 監聽 popup 傳入的指令 ────────────────────────────────────
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -375,9 +368,9 @@ if (window.__kktixLoaded) {
                     ],
                 }),
             });
-            sendLog("📣 Discord 通知已送出", "success");
+            sendLogKKTIX("📃 Discord 通知已送出", "success");
         } catch (err) {
-            sendLog(`❌ Discord 通知失敗：${err.message}`, "error");
+            sendLogKKTIX(`❌ Discord 通知失敗：${err.message}`, "error");
         }
     }
 
@@ -390,6 +383,5 @@ if (window.__kktixLoaded) {
     });
     checkoutObserver.observe(document.body, { childList: true, subtree: true });
 
-    sendLog("KKTIX 搶票助手已注入頁面 ✅", "success");
-
-} // end of __kktixLoaded guard
+    sendLogKKTIX("KKTIX 搶票助手已注入頁面 ✅", "success");
+}

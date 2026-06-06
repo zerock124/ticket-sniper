@@ -45,6 +45,7 @@
         "https://*.tixcraft.com/*"
       ],
       "js": [
+        "shared.js",
         "tixcraft/tixcraft-content.js"
       ],
       "run_at": "document_start",
@@ -56,6 +57,7 @@
         "https://*.kktix.com/*"
       ],
       "js": [
+        "shared.js",
         "kktix/kktix-content.js"
       ],
       "run_at": "document_idle"

@@ -34,7 +34,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       try {
         await chrome.scripting.executeScript({
           target: { tabId },
-          files: ["kktix-content.js"],
+          files: ["shared.js", "kktix/kktix-content.js"],
         });
       } catch (err) {
         console.warn("[搶票助手] KKTIX 腳本注入失敗：", err.message);
@@ -75,7 +75,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       try {
         await chrome.scripting.executeScript({
           target: { tabId },
-          files: ["tixcraft-content.js"],
+          files: ["tixcraft/tixcraft-alert-override.js"],
+          world: "MAIN",
+        });
+
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["shared.js", "tixcraft/tixcraft-content.js"],
         });
       } catch (err) {
         console.warn("[搶票助手] Tixcraft 腳本注入失敗：", err.message);
