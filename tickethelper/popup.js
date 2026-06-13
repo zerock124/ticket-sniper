@@ -1,11 +1,30 @@
 // ============================================================
 //  popup.js — 搶票助手 Pro 彈出視窗邏輯（整合版）
-//  包含 KKTIX 和 Tixcraft 兩個平台的控制邏輯
+//  包含 KKTIX、Tixcraft 和 Inline 三個平台的控制邏輯
+// ============================================================
+// 功能：
+// - 管理全域開關（啟用/停用腳本注入）
+// - 管理三個平台的設定介面
+// - 發送 START/STOP 指令給內容腳本
+// - 顯示各平台的即時日誌
+// - 管理設定的儲存和讀取
+// 
+// 介面結構：
+// - 全域開關區：控制所有平台的腳本注入
+// - 平台切換按鈕：KKTIX / Tixcraft / Inline
+// - 各平台子分頁：設定 / 邏輯設定 / 日誌
+// 
+// 通訊流程：
+// popup.js → background.js → content script
+// content script → popup.js（日誌和事件）
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════
 //  全域 Toast 通知系統
 // ═══════════════════════════════════════════════════════════
+
+// popup.js
+// 側邊欄主控台：管理設定、啟動流程與顯示平台日誌。
 
 const toastEl = document.getElementById("toast");
 let toastTimeout = null;
@@ -16,6 +35,7 @@ let toastTimeout = null;
  * @param {string} type - 通知類型：success/error/warn/info
  * @param {number} duration - 顯示時長（毫秒），預設 2500
  */
+// 顯示 Toast 訊息，統一處理側邊欄內的成功、警告與錯誤提示。
 function showToast(message, type = "info", duration = 2500) {
     // 清除現有的 timeout
     if (toastTimeout) {
@@ -102,6 +122,65 @@ function updateToggleUI(enabled) {
         section.style.borderColor = "#f44336";
         section.style.background = "rgba(244, 67, 54, 0.1)";
     }
+}
+
+function popupDelay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function popupGetActiveTabId(urlPatterns) {
+    return new Promise((resolve) => {
+        chrome.tabs.query({ url: urlPatterns }, (tabs) => {
+            if (tabs && tabs.length > 0) {
+                const activeTab = tabs.find(tab => tab.active) ?? tabs[tabs.length - 1];
+                resolve(activeTab.id);
+                return;
+            }
+            resolve(null);
+        });
+    });
+}
+
+async function popupEnsureTabId({ urlPatterns, createUrl = "", createDelayMs = 0 }) {
+    let tabId = await popupGetActiveTabId(urlPatterns);
+    if (!tabId && createUrl) {
+        const tab = await chrome.tabs.create({ url: createUrl, active: true });
+        tabId = tab.id;
+        if (createDelayMs > 0) {
+            await popupDelay(createDelayMs);
+        }
+    }
+    return tabId;
+}
+
+async function popupInjectFiles(tabId, files, onWarn) {
+    try {
+        await chrome.scripting.executeScript({ target: { tabId }, files });
+    } catch (error) {
+        onWarn?.(error);
+    }
+}
+
+function popupSendMessage(tabId, payload, onSuccess, onError) {
+    chrome.tabs.sendMessage(tabId, payload, (response) => {
+        if (chrome.runtime.lastError) {
+            onError?.(chrome.runtime.lastError);
+            return;
+        }
+        onSuccess?.(response);
+    });
+}
+
+function popupStorageSet(data) {
+    return new Promise(resolve => chrome.storage.local.set(data, resolve));
+}
+
+function popupSetRunningState(prefix, isRunning, runningConfig = null) {
+    const payload = { [`${prefix}_isRunning`]: isRunning };
+    if (runningConfig !== null) {
+        payload[`${prefix}_runningConfig`] = runningConfig;
+    }
+    return popupStorageSet(payload);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -258,7 +337,7 @@ async function kktixFetchTickets() {
     }
 
     try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix/kktix-content.js"] });
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["shared.js", "kktix/kktix-content.js"] });
     } catch (err) {
         kktixAddLog(`⚠️ 注入腳本失敗：${err.message}`, "warn");
     }
@@ -349,17 +428,7 @@ function kktixRenderTicketList(tickets) {
 // ── KKTIX 與 Content Script 通訊 ─────────────────────────────────
 
 async function kktixGetActiveTabId() {
-    return new Promise((resolve) => {
-        // 查詢所有視窗中符合 kktix.com 的分頁
-        chrome.tabs.query({ url: ["https://kktix.com/*", "https://*.kktix.com/*", "https://*.kktix.cc/*"] }, (tabs) => {
-            if (tabs && tabs.length > 0) {
-                const activeTab = tabs.find(t => t.active) ?? tabs[tabs.length - 1];
-                resolve(activeTab.id);
-            } else {
-                resolve(null);
-            }
-        });
-    });
+    return popupGetActiveTabId(["https://kktix.com/*", "https://*.kktix.com/*", "https://*.kktix.cc/*"]);
 }
 
 async function kktixSendToContent(action, data = {}) {
@@ -369,25 +438,25 @@ async function kktixSendToContent(action, data = {}) {
         return;
     }
 
-    try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["kktix/kktix-content.js"] });
-    } catch (err) {
+    await popupInjectFiles(tabId, ["shared.js", "kktix/kktix-content.js"], (err) => {
         kktixAddLog(`⚠️ 注入腳本失敗：${err.message}`, "warn");
-    }
-
-    // 等待注入腳本初始化
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
-        if (chrome.runtime.lastError) {
-            kktixAddLog(`⚠️ 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
-            kktixAddLog("請確認已在 KKTIX 頁面，並重新整理後再試", "info");
-            return;
-        }
-        if (response?.log) {
-            kktixAddLog(response.log, response.type ?? "info");
-        }
     });
+
+    await popupDelay(300);
+
+    popupSendMessage(
+        tabId,
+        { action, ...data },
+        (response) => {
+            if (response?.log) {
+                kktixAddLog(response.log, response.type ?? "info");
+            }
+        },
+        (runtimeError) => {
+            kktixAddLog(`⚠️ 通訊錯誤：${runtimeError.message}`, "warn");
+            kktixAddLog("請確認已在 KKTIX 頁面，並重新整理後再試", "info");
+        }
+    );
 }
 
 // ── KKTIX 按鈕事件 ────────────────────────────────────────────────
@@ -413,7 +482,7 @@ kktixStartBtn.addEventListener("click", async () => {
         chrome.storage.local.set({ kktix_chooseArea: checkedPrices });
     }
 
-    chrome.storage.local.set({
+    await popupStorageSet({
         kktix_buyCount: settings.buyCount,
         kktix_memberCode: settings.memberCode,
         kktix_question: settings.question,
@@ -446,7 +515,7 @@ kktixStartBtn.addEventListener("click", async () => {
 });
 
 kktixStopBtn.addEventListener("click", async () => {
-    chrome.storage.local.set({ kktix_isRunning: false });
+    await popupSetRunningState("kktix", false);
     kktixSetStatus("idle", "已停止");
     kktixStartBtn.disabled = false;
     kktixStopBtn.disabled = true;
@@ -607,6 +676,11 @@ function tcGetOcrApiUrl() {
     return tcOcrApiUrlSelectEl.value;
 }
 
+function tcGetOcrBaseUrl() {
+    const apiUrl = tcGetOcrApiUrl().replace(/\/+$/, "");
+    return apiUrl.endsWith("/ocr") ? apiUrl.slice(0, -4) : apiUrl;
+}
+
 function tcSetOcrApiUrl(url) {
     const options = Array.from(tcOcrApiUrlSelectEl.options).map(o => o.value);
     const presetIdx = options.indexOf(url);
@@ -630,8 +704,7 @@ tcOcrApiUrlSelectEl.addEventListener("change", () => {
 });
 
 async function tcCheckOcrServer() {
-    const apiUrl = tcGetOcrApiUrl();
-    const healthUrl = apiUrl + "/health";
+    const healthUrl = tcGetOcrBaseUrl() + "/health";
 
     try {
         const res = await fetch(healthUrl, {
@@ -705,17 +778,7 @@ function tcBuildSettings() {
 // ── Tixcraft 與 Content Script 通訊 ──────────────────────────────
 
 async function tcGetActiveTabId() {
-    return new Promise((resolve) => {
-        // 查詢所有視窗中符合 tixcraft.com 的分頁
-        chrome.tabs.query({ url: ["https://tixcraft.com/*", "https://*.tixcraft.com/*"] }, (tabs) => {
-            if (tabs && tabs.length > 0) {
-                const activeTab = tabs.find(t => t.active) ?? tabs[tabs.length - 1];
-                resolve(activeTab.id);
-            } else {
-                resolve(null);
-            }
-        });
-    });
+    return popupGetActiveTabId(["https://tixcraft.com/*", "https://*.tixcraft.com/*"]);
 }
 
 async function tcSendToContent(action, data = {}) {
@@ -725,25 +788,25 @@ async function tcSendToContent(action, data = {}) {
         return;
     }
 
-    try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["tixcraft/tixcraft-content.js"] });
-    } catch (err) {
+    await popupInjectFiles(tabId, ["shared.js", "tixcraft/tixcraft-content.js"], (err) => {
         tcAddLog(`⚠️ 注入腳本失敗：${err.message}`, "warn");
-    }
-
-    // 等待注入腳本初始化
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
-        if (chrome.runtime.lastError) {
-            tcAddLog(`⚠️ 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
-            tcAddLog("請確認已在 Tixcraft 頁面，並重新整理後再試", "info");
-            return;
-        }
-        if (response?.log) {
-            tcAddLog(response.log, response.type ?? "info");
-        }
     });
+
+    await popupDelay(300);
+
+    popupSendMessage(
+        tabId,
+        { action, ...data },
+        (response) => {
+            if (response?.log) {
+                tcAddLog(response.log, response.type ?? "info");
+            }
+        },
+        (runtimeError) => {
+            tcAddLog(`⚠️ 通訊錯誤：${runtimeError.message}`, "warn");
+            tcAddLog("請確認已在 Tixcraft 頁面，並重新整理後再試", "info");
+        }
+    );
 }
 
 // ── Tixcraft 按鈕事件 ─────────────────────────────────────────────
@@ -774,7 +837,7 @@ tcStartBtn.addEventListener("click", async () => {
     const chooseDateArr = tcParseKeywords(settings.chooseDate);
     const chooseAreaArr = tcParseKeywords(settings.chooseArea);
 
-    chrome.storage.local.set({
+    await popupStorageSet({
         tixcraft_buyCount: settings.buyCount,
         tixcraft_chooseDate: settings.chooseDate,
         tixcraft_chooseArea: settings.chooseArea,
@@ -838,7 +901,7 @@ tcStartBtn.addEventListener("click", async () => {
 });
 
 tcStopBtn.addEventListener("click", async () => {
-    chrome.storage.local.set({ tixcraft_isRunning: false });
+    await popupSetRunningState("tixcraft", false);
     tcSetStatus("idle", "已停止");
     tcStartBtn.disabled = false;
     tcStopBtn.disabled = true;
@@ -1224,48 +1287,38 @@ function inLoadSettings() {
 }
 
 async function inGetActiveTabId(targetUrl = "") {
-    return new Promise(resolve => {
-        chrome.tabs.query({ url: ["https://inline.app/*", "https://*.inline.app/*"] }, (tabs) => {
-            if (tabs && tabs.length > 0) {
-                const activeTab = tabs.find(t => t.active) ?? tabs[tabs.length - 1];
-                resolve(activeTab.id);
-                return;
-            }
-            resolve(null);
-        });
-    });
+    return popupGetActiveTabId(["https://inline.app/*", "https://*.inline.app/*"]);
 }
 
 async function inSendToContent(action, data = {}) {
-    let tabId = await inGetActiveTabId(data.targetUrl);
-
-    if (!tabId && data.targetUrl) {
-        const tab = await chrome.tabs.create({ url: data.targetUrl, active: true });
-        tabId = tab.id;
-        await new Promise(resolve => setTimeout(resolve, 1200));
-    }
+    let tabId = await popupEnsureTabId({
+        urlPatterns: ["https://inline.app/*", "https://*.inline.app/*"],
+        createUrl: data.targetUrl || "",
+        createDelayMs: 1200,
+    });
 
     if (!tabId) {
         inAddLog("❌ 找不到 Inline 分頁，請先開啟 inline.app 訂位頁", "error");
         return;
     }
 
-    try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["inline/inline-content.js"] });
-    } catch (err) {
+    await popupInjectFiles(tabId, ["inline/inline-content.js"], (err) => {
         inAddLog(`⚠️ 注入 Inline 腳本失敗：${err.message}`, "warn");
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    chrome.tabs.sendMessage(tabId, { action, ...data }, (response) => {
-        if (chrome.runtime.lastError) {
-            inAddLog(`⚠️ Inline 通訊錯誤：${chrome.runtime.lastError.message}`, "warn");
-            inAddLog("請確認已在 Inline 訂位頁，並重新整理後再試", "info");
-            return;
-        }
-        if (response?.log) inAddLog(response.log, response.type ?? "info");
     });
+
+    await popupDelay(300);
+
+    popupSendMessage(
+        tabId,
+        { action, ...data },
+        (response) => {
+            if (response?.log) inAddLog(response.log, response.type ?? "info");
+        },
+        (runtimeError) => {
+            inAddLog(`⚠️ Inline 通訊錯誤：${runtimeError.message}`, "warn");
+            inAddLog("請確認已在 Inline 訂位頁，並重新整理後再試", "info");
+        }
+    );
 }
 
 function inSaveSettings(show = true) {
@@ -1354,7 +1407,7 @@ inStartBtn.addEventListener("click", async () => {
 });
 
 inStopBtn.addEventListener("click", async () => {
-    chrome.storage.local.set({ inline_isRunning: false });
+    await popupSetRunningState("inline", false);
     inSetStatus("idle", "已停止");
     inStartBtn.disabled = false;
     inStopBtn.disabled = true;

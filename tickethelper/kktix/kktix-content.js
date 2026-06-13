@@ -2,6 +2,21 @@
 //  kktix-content.js — KKTIX 搶票助手 內容腳本（整合版）
 //  負責在 KKTIX 頁面上執行自動搶票流程
 // ============================================================
+// 功能：
+// - 自動選擇票種（依金額優先順序）
+// - 自動設定購買數量
+// - 自動勾選同意條款
+// - 自動填寫會員代碼和問題答案
+// - 支援全域開關控制
+// - 支援 reload 後自動恢復流程
+// 
+// 流程：
+// Step 1: 選擇票種（排除輪椅/身障席，依 choose_area 金額優先順序）
+// Step 2: 選擇購買數量（點擊 + 按鈕）
+// Step 3: 勾選同意條款
+// Step Q: 填入會員代碼和問題答案（如果有）
+// Step 4: 點擊立即購買
+// ============================================================
 
 // 防止重複注入：同一頁面已載入時直接略過，reload 後旗標消失會重新初始化
 if (window.__kktixLoaded) {
@@ -80,9 +95,18 @@ if (window.__kktixLoaded) {
         });
     }
 
-    // ── 搶票步驟 ─────────────────────────────────────────────────
+    // ============================================================
+    // 搶票步驟函式
+    // ============================================================
 
-    // Step 1：選擇票種
+    /**
+     * Step 1：選擇票種
+     * 
+     * 功能：
+     * 1. 篩出可操作的票種（排除輪椅/身障席）
+     * 2. 依優先順序匹配票種金額
+     * 3. 如果找不到指定金額，重新整理頁面
+     */
     async function step1() {
         const priorityList = CONFIG.choose_area;
         const allUnits = Array.from(document.querySelectorAll(".ticket-unit"));
@@ -127,7 +151,13 @@ if (window.__kktixLoaded) {
         // sendLog("Step 1 完成：已選定票種");  // 簡化 LOG：移除步驟細節
     }
 
-    // Step 2：選擇購買數量
+    /**
+     * Step 2：選擇購買數量
+     * 
+     * 功能：
+     * 1. 點擊 + 按鈕增加數量到指定值
+     * 2. 確認數量欄位顯示正確
+     */
     async function step2() {
         await clickWithRetry(".btn-default.plus", {
             context: randomUnit,
@@ -145,7 +175,13 @@ if (window.__kktixLoaded) {
         // sendLog(`Step 2 完成：數量設為 ${CONFIG.buy_count}`);  // 簡化 LOG：移除步驟細節
     }
 
-    // Step 3：勾選同意條款
+    /**
+     * Step 3：勾選同意條款
+     * 
+     * 功能：
+     * 1. 找到同意條款勾選框
+     * 2. 觸發 change 事件並點擊
+     */
     async function step3() {
         const checkbox = document.getElementById("person_agree_terms");
 
@@ -159,13 +195,24 @@ if (window.__kktixLoaded) {
         // sendLog("Step 3 完成：已勾選同意條款");  // 簡化 LOG：移除步驟細節
     }
 
-    // Step 4：按下立即購買按鈕
+    /**
+     * Step 4：按下立即購買按鈕
+     * 
+     * 功能：
+     * 點擊 KKTIX 的主要送出按鈕
+     */
     async function step4() {
         await clickWithRetry(".btn.btn-primary.btn-lg.ng-isolate-scope");
         // sendLog("Step 4 完成：已點擊立即購買");  // 簡化 LOG：移除步驟細節
     }
 
-    // Step Q：填入會員代碼 / 問題答案
+    /**
+     * Step Q：填入會員代碼 / 問題答案
+     * 
+     * 功能：
+     * 1. 如果有會員代碼欄位且設定了 membercode，填入
+     * 2. 如果有驗證問題且設定了 question，填入
+     */
     async function step_question() {
         // 會員代碼
         const membership = document.querySelector("input.member-code");
@@ -182,8 +229,20 @@ if (window.__kktixLoaded) {
         }
     }
 
-    // ── 主流程 ──────────────────────────────────────────────────
+    // ============================================================
+    // 主流程控制函式
+    // ============================================================
 
+    /**
+     * 主流程執行函式（帶恢復機制）
+     * 
+     * 流程：
+     * 1. 等待票券頁面載入
+     * 2. 依序執行 step1 → step2 → step3 → step_question → step4
+     * 3. 如果有錯誤，重試最多 5 次
+     * 4. 錯誤過多時重新整理頁面
+     * 5. 所有步驟完成後發送 DONE 事件
+     */
     async function runStepsWithResume() {
         isRunning = true;
         shouldStop = false;
