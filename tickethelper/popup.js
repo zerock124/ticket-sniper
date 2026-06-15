@@ -1032,6 +1032,12 @@ const inEmailEl = document.getElementById("inline-email");
 const inPurposeEl = document.getElementById("inline-purpose");
 const inNoteEl = document.getElementById("inline-note");
 const inAutoAgreeEl = document.getElementById("inline-autoAgree");
+const inAutoCardFillEl = document.getElementById("inline-autoCardFill");
+const inAutoSubmitPaymentEl = document.getElementById("inline-autoSubmitPayment");
+const inCardNumberEl = document.getElementById("inline-cardNumber");
+const inCardExpiryEl = document.getElementById("inline-cardExpiry");
+const inCardCcvEl = document.getElementById("inline-cardCcv");
+const inCardholderNameEl = document.getElementById("inline-cardholderName");
 const inStartBtn = document.getElementById("inline-startBtn");
 const inStopBtn = document.getElementById("inline-stopBtn");
 const inSaveBtn = document.getElementById("inline-saveBtn");
@@ -1183,6 +1189,12 @@ function inBuildSettings() {
         purposes: inParseKeywords(inPurposeEl.value),
         note: inNoteEl.value.trim(),
         autoAgree: inAutoAgreeEl.value === "true",
+        autoCardFill: inAutoCardFillEl?.value === "true",
+        autoSubmitPayment: inAutoSubmitPaymentEl?.value === "true",
+        cardNumber: inCardNumberEl?.value.trim() || "",
+        cardExpiry: inCardExpiryEl?.value.trim() || "",
+        cardCcv: inCardCcvEl?.value.trim() || "",
+        cardholderName: inCardholderNameEl?.value.trim() || "",
     };
 }
 
@@ -1190,7 +1202,8 @@ function inLoadSettings() {
     chrome.storage.local.get([
         "inline_targetUrl", "inline_adultCount", "inline_kidCount", "inline_priorityPlan",
         "inline_reloadOnNoTime", "inline_reloadDelay", "inline_name", "inline_gender", "inline_phone",
-        "inline_email", "inline_purpose", "inline_note", "inline_autoAgree", "inline_isRunning", "inline_savedLogs", "globalEnabled"
+        "inline_email", "inline_purpose", "inline_note", "inline_autoAgree", "inline_autoCardFill", "inline_autoSubmitPayment",
+        "inline_cardNumber", "inline_cardExpiry", "inline_cardCcv", "inline_cardholderName", "inline_isRunning", "inline_savedLogs", "globalEnabled"
     ], (r) => {
         inTargetUrlEl.value = r.inline_targetUrl ?? "";
         inAdultCountEl.value = r.inline_adultCount ?? 2;
@@ -1205,6 +1218,12 @@ function inLoadSettings() {
         inPurposeEl.value = r.inline_purpose ?? "";
         inNoteEl.value = r.inline_note ?? "";
         inAutoAgreeEl.value = String(r.inline_autoAgree ?? true);
+        if (inAutoCardFillEl) inAutoCardFillEl.value = String(r.inline_autoCardFill ?? false);
+        if (inAutoSubmitPaymentEl) inAutoSubmitPaymentEl.value = String(r.inline_autoSubmitPayment ?? false);
+        if (inCardNumberEl) inCardNumberEl.value = r.inline_cardNumber ?? "";
+        if (inCardExpiryEl) inCardExpiryEl.value = r.inline_cardExpiry ?? "";
+        if (inCardCcvEl) inCardCcvEl.value = r.inline_cardCcv ?? "";
+        if (inCardholderNameEl) inCardholderNameEl.value = r.inline_cardholderName ?? "";
 
         (r.inline_savedLogs ?? []).forEach(({ time, message, type }) => inRenderLogEntry(time, message, type));
 
@@ -1284,6 +1303,12 @@ function inSaveSettings(show = true) {
         inline_purpose: s.purpose,
         inline_note: s.note,
         inline_autoAgree: s.autoAgree,
+        inline_autoCardFill: s.autoCardFill,
+        inline_autoSubmitPayment: s.autoSubmitPayment,
+        inline_cardNumber: s.cardNumber,
+        inline_cardExpiry: s.cardExpiry,
+        inline_cardCcv: s.cardCcv,
+        inline_cardholderName: s.cardholderName,
     }, () => {
         if (show) {
             showToast("Inline 設定已儲存", "success");

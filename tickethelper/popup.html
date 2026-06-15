@@ -333,7 +333,7 @@
         <div id="panel-inline" class="platform-panel">
             <div class="tab-nav">
                 <button class="tab-btn active" data-tab="inline-tab-basic">📝 基礎設定</button>
-                <button class="tab-btn" data-tab="inline-tab-contact">👤 聯絡資訊</button>
+                <button class="tab-btn" data-tab="inline-tab-contact">👤 聯絡/信用卡</button>
                 <button class="tab-btn" data-tab="inline-tab-run">▶️ 執行控制</button>
             </div>
 
@@ -451,6 +451,40 @@
                         <option value="true">自動勾選同意條款</option>
                         <option value="false">不勾選</option>
                     </select>
+                </div>
+                <div class="section">
+                    <div class="section-group-title">💳 信用卡資料</div>
+                    <div class="hint">只有 Inline 出現信用卡綁定/付款表單時才會使用。若付款欄位驗證未通過，流程會停在確認訂位前，不會假裝成功。</div>
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-autoCardFill">信用卡預填</label>
+                    <select id="inline-autoCardFill" class="input">
+                        <option value="false">不自動填信用卡</option>
+                        <option value="true">自動填信用卡</option>
+                    </select>
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-autoSubmitPayment">信用卡表單送出</label>
+                    <select id="inline-autoSubmitPayment" class="input">
+                        <option value="false">填完停在確認訂位前</option>
+                        <option value="true">信用卡驗證通過後自動確認訂位</option>
+                    </select>
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-cardNumber">信用卡卡號</label>
+                    <input type="password" id="inline-cardNumber" class="input" inputmode="numeric" autocomplete="off" placeholder="可含空格，儲存在本機瀏覽器" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-cardExpiry">信用卡有效期限（月/年）</label>
+                    <input type="text" id="inline-cardExpiry" class="input" inputmode="numeric" autocomplete="off" placeholder="例如：06/30 或 0630" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-cardCcv">信用卡安全碼</label>
+                    <input type="password" id="inline-cardCcv" class="input" inputmode="numeric" autocomplete="off" placeholder="3 或 4 碼" />
+                </div>
+                <div class="section">
+                    <label class="label" for="inline-cardholderName">持卡人姓名</label>
+                    <input type="text" id="inline-cardholderName" class="input" autocomplete="off" placeholder="空白時使用訂位人姓名" />
                 </div>
                 <button id="inline-saveContactBtn" class="btn btn-save">💾 儲存聯絡資訊</button>
             </div>
